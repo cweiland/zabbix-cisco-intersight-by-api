@@ -1,0 +1,4351 @@
+zabbix_export:
+  version: '7.0'
+  template_groups:
+  - uuid: e885b88ecaf24a609f83378cf5b406e7
+    name: Templates/Cisco Intersight
+  host_groups:
+  - uuid: 3551e392b7ef42ecb1bad66fd26abbff
+    name: Intersight/Servers
+  - uuid: d0a6a8717b7041ccbd5a0724741076e8
+    name: Intersight/Chassis
+  - uuid: 5718b96784474160b6185a5ad43ab06c
+    name: Intersight/FI
+  templates:
+  - uuid: 02cec3ef1c0247a7a900bb2ab6556251
+    template: Cisco Intersight Server by push
+    name: Cisco Intersight Server by push
+    description: 'Linked by host prototypes of "Cisco Intersight by API". Receives data via history.push; makes no API call itself. Class: rack and blade servers.'
+    vendor:
+      name: Custom
+      version: 7.0-5
+    groups:
+    - name: Templates/Cisco Intersight
+    items:
+    - uuid: 21e93c5a89674d50948a85c794de6ae5
+      name: Raw data (pushed by Intersight collector)
+      type: TRAP
+      key: intersight.raw
+      history: 1h
+      value_type: TEXT
+      trends: '0'
+      description: Filled by the parent host "Cisco Intersight by API" through the history.push API method. If Allowed hosts is set, it must include the Zabbix frontend IP.
+      tags:
+      - tag: component
+        value: raw
+      - tag: class
+        value: server
+      triggers:
+      - uuid: b2dfda9c420e4cce811118eddcee1565
+        expression: nodata(/Cisco Intersight Server by push/intersight.raw,{$INTERSIGHT.NODATA})=1
+        name: 'Intersight: no data pushed for {$INTERSIGHT.NODATA}'
+        priority: WARNING
+        description: Check the parent collector item (API errors, push errors, API token).
+    - uuid: 9c0effc72d344b6588dda6a79b510469
+      name: 'Alarms: critical'
+      type: DEPENDENT
+      key: intersight.alarms.critical
+      value_type: UNSIGNED
+      master_item:
+        key: intersight.raw
+      preprocessing:
+      - type: JSONPATH
+        parameters:
+        - $.alarm_critical
+        error_handler: DISCARD_VALUE
+      tags:
+      - tag: component
+        value: alarms
+      - tag: class
+        value: server
+      triggers:
+      - uuid: a8f2a072688445b1a2a4589704fc2666
+        expression: last(/Cisco Intersight Server by push/intersight.alarms.critical)>0
+        name: 'Intersight: {ITEM.LASTVALUE1} critical alarm(s)'
+        priority: HIGH
+    - uuid: 172a16f53bcd4099a5b94afbcf20847d
+      name: 'Alarms: warning'
+      type: DEPENDENT
+      key: intersight.alarms.warning
+      value_type: UNSIGNED
+      master_item:
+        key: intersight.raw
+      preprocessing:
+      - type: JSONPATH
+        parameters:
+        - $.alarm_warning
+        error_handler: DISCARD_VALUE
+      tags:
+      - tag: component
+        value: alarms
+      - tag: class
+        value: server
+      triggers:
+      - uuid: 4f836a2112a94421a30f847c689d72cd
+        expression: last(/Cisco Intersight Server by push/intersight.alarms.warning)>0
+        name: 'Intersight: {ITEM.LASTVALUE1} warning alarm(s)'
+        priority: WARNING
+    - uuid: 26b793047a7449b5b7891c8a9151c320
+      name: Model
+      type: DEPENDENT
+      key: intersight.model
+      value_type: CHAR
+      master_item:
+        key: intersight.raw
+      history: 7d
+      trends: '0'
+      inventory_link: MODEL
+      preprocessing:
+      - type: JSONPATH
+        parameters:
+        - $.model
+        error_handler: DISCARD_VALUE
+      - type: DISCARD_UNCHANGED_HEARTBEAT
+        parameters:
+        - 1d
+      tags:
+      - tag: component
+        value: inventory
+      - tag: class
+        value: server
+    - uuid: 09ccc6ddc6a14f7d909056e1250eb278
+      name: Serial number
+      type: DEPENDENT
+      key: intersight.serial
+      value_type: CHAR
+      master_item:
+        key: intersight.raw
+      history: 7d
+      trends: '0'
+      inventory_link: SERIALNO_A
+      preprocessing:
+      - type: JSONPATH
+        parameters:
+        - $.serial
+        error_handler: DISCARD_VALUE
+      - type: DISCARD_UNCHANGED_HEARTBEAT
+        parameters:
+        - 1d
+      tags:
+      - tag: component
+        value: inventory
+      - tag: class
+        value: server
+    - uuid: 8820b48154d541278c06c163dbfa3cac
+      name: 'Power: average'
+      type: DEPENDENT
+      key: intersight.power
+      value_type: FLOAT
+      master_item:
+        key: intersight.raw
+      units: W
+      preprocessing:
+      - type: JSONPATH
+        parameters:
+        - $.power_w
+        error_handler: DISCARD_VALUE
+      tags:
+      - tag: component
+        value: power
+      - tag: class
+        value: server
+    - uuid: 89133279299a4c87a8aad0f597587b5d
+      name: 'Power: peak'
+      type: DEPENDENT
+      key: intersight.power.max
+      value_type: FLOAT
+      master_item:
+        key: intersight.raw
+      units: W
+      preprocessing:
+      - type: JSONPATH
+        parameters:
+        - $.power_max_w
+        error_handler: DISCARD_VALUE
+      tags:
+      - tag: component
+        value: power
+      - tag: class
+        value: server
+    - uuid: 91d532ab428b4488986bd13fba5dd396
+      name: 'Temperature: hottest sensor'
+      type: DEPENDENT
+      key: intersight.temp.max
+      value_type: FLOAT
+      master_item:
+        key: intersight.raw
+      units: °C
+      preprocessing:
+      - type: JSONPATH
+        parameters:
+        - $.temp_max
+        error_handler: DISCARD_VALUE
+      tags:
+      - tag: component
+        value: thermal
+      - tag: class
+        value: server
+    - uuid: 141c4dca70a849ccb7af5489046fdd81
+      name: 'Temperature: smallest margin to critical'
+      type: DEPENDENT
+      key: intersight.temp.margin
+      value_type: FLOAT
+      master_item:
+        key: intersight.raw
+      units: °C
+      preprocessing:
+      - type: JSONPATH
+        parameters:
+        - $.temp_margin_min
+        error_handler: DISCARD_VALUE
+      tags:
+      - tag: component
+        value: thermal
+      - tag: class
+        value: server
+      triggers:
+      - uuid: a34f90fb7da94a37ac8b4fcfc40c4735
+        expression: max(/Cisco Intersight Server by push/intersight.temp.margin,15m)<{$INTERSIGHT.TEMP.MARGIN.WARN}
+        name: 'Intersight: a sensor is within {$INTERSIGHT.TEMP.MARGIN.WARN}°C of its critical threshold'
+        priority: HIGH
+        description: Margin = hw.temperature.limit_high_critical - hw.temperature, per sensor. Each sensor is compared with its own threshold.
+    - uuid: 9ef6e4ae7a894224bcdf226419356bf7
+      name: 'Temperature: smallest margin to non-critical threshold'
+      type: DEPENDENT
+      key: intersight.temp.margin.degraded
+      value_type: FLOAT
+      master_item:
+        key: intersight.raw
+      units: °C
+      preprocessing:
+      - type: JSONPATH
+        parameters:
+        - $.temp_margin_degraded_min
+        error_handler: DISCARD_VALUE
+      tags:
+      - tag: component
+        value: thermal
+      - tag: class
+        value: server
+      triggers:
+      - uuid: 14df77b796664762bb2f38042f2df0ce
+        expression: max(/Cisco Intersight Server by push/intersight.temp.margin.degraded,15m)<0
+        name: 'Intersight: a sensor is above its non-critical temperature threshold'
+        priority: WARNING
+        description: hw.temperature above hw.temperature.limit_high_degraded for 15m, on at least one sensor.
+    - uuid: d2a779b847874f85b756c5b9e6e90299
+      name: 'Fans: lowest speed'
+      type: DEPENDENT
+      key: intersight.fan.min
+      value_type: FLOAT
+      master_item:
+        key: intersight.raw
+      units: rpm
+      preprocessing:
+      - type: JSONPATH
+        parameters:
+        - $.fan_min
+        error_handler: DISCARD_VALUE
+      tags:
+      - tag: component
+        value: fans
+      - tag: class
+        value: server
+    - uuid: b048ad4579a64a32a8a4e886032af30c
+      name: 'Fans: smallest margin to lower critical speed'
+      type: DEPENDENT
+      key: intersight.fan.margin
+      value_type: FLOAT
+      master_item:
+        key: intersight.raw
+      units: rpm
+      preprocessing:
+      - type: JSONPATH
+        parameters:
+        - $.fan_margin_min
+        error_handler: DISCARD_VALUE
+      tags:
+      - tag: component
+        value: fans
+      - tag: class
+        value: server
+      triggers:
+      - uuid: 12ac256129cf4282bdc5edfa97346462
+        expression: max(/Cisco Intersight Server by push/intersight.fan.margin,15m)<0
+        name: 'Intersight: a fan is below its lower critical speed'
+        priority: AVERAGE
+        description: hw.fan.speed below hw.fan.speed.limit_low_critical for 15m, on at least one fan.
+    - uuid: 2bf45221c3104748bdf1b8ce44d5cfdd
+      name: 'Fans: highest speed'
+      type: DEPENDENT
+      key: intersight.fan.max
+      value_type: FLOAT
+      master_item:
+        key: intersight.raw
+      units: rpm
+      preprocessing:
+      - type: JSONPATH
+        parameters:
+        - $.fan_max
+        error_handler: DISCARD_VALUE
+      tags:
+      - tag: component
+        value: fans
+      - tag: class
+        value: server
+    - uuid: 9cc2e148c5584c628697dc92d61b343d
+      name: 'PSU: highest utilization'
+      type: DEPENDENT
+      key: intersight.psu.util.max
+      value_type: FLOAT
+      master_item:
+        key: intersight.raw
+      units: '%'
+      preprocessing:
+      - type: JSONPATH
+        parameters:
+        - $.psu_util_max
+        error_handler: DISCARD_VALUE
+      tags:
+      - tag: component
+        value: psu
+      - tag: class
+        value: server
+    - uuid: 5df84c16461d47bfa27e17cfcad81fd0
+      name: 'Network: errors in window'
+      type: DEPENDENT
+      key: intersight.net.errors
+      value_type: FLOAT
+      master_item:
+        key: intersight.raw
+      preprocessing:
+      - type: JSONPATH
+        parameters:
+        - $.net_errors
+        error_handler: DISCARD_VALUE
+      tags:
+      - tag: component
+        value: network
+      - tag: class
+        value: server
+    - uuid: 6f7b695b36174ad2882fb841ad01915b
+      name: 'Network: received'
+      type: DEPENDENT
+      key: intersight.net.rx
+      value_type: FLOAT
+      master_item:
+        key: intersight.raw
+      units: Bps
+      preprocessing:
+      - type: JSONPATH
+        parameters:
+        - $.net_rx_bps
+        error_handler: DISCARD_VALUE
+      tags:
+      - tag: component
+        value: network
+      - tag: class
+        value: server
+    - uuid: 330adfc9b609441f94126867284ea7b9
+      name: 'Network: transmitted'
+      type: DEPENDENT
+      key: intersight.net.tx
+      value_type: FLOAT
+      master_item:
+        key: intersight.raw
+      units: Bps
+      preprocessing:
+      - type: JSONPATH
+        parameters:
+        - $.net_tx_bps
+        error_handler: DISCARD_VALUE
+      tags:
+      - tag: component
+        value: network
+      - tag: class
+        value: server
+    - uuid: 28d3c195db444aed9f6b779a55497923
+      name: 'Energy: last 24h'
+      type: CALCULATED
+      key: intersight.energy.kwh.24h
+      delay: 1h
+      value_type: FLOAT
+      params: avg(//intersight.power,24h)*24/1000
+      units: kWh
+      tags:
+      - tag: component
+        value: energy
+      - tag: class
+        value: server
+    - uuid: d735186042e34f9f8a443249e7fec037
+      name: 'Memory: correctable ECC errors in window'
+      type: DEPENDENT
+      key: intersight.mem.ecc.correctable
+      value_type: FLOAT
+      master_item:
+        key: intersight.raw
+      preprocessing:
+      - type: JSONPATH
+        parameters:
+        - $.mem_ecc_correctable
+        error_handler: DISCARD_VALUE
+      tags:
+      - tag: component
+        value: memory
+      - tag: class
+        value: server
+      triggers:
+      - uuid: f72b9a7da49a4577baae8b454c4ad7e0
+        expression: min(/Cisco Intersight Server by push/intersight.mem.ecc.correctable,#3)>{$INTERSIGHT.ECC.CORRECTABLE.WARN}
+        name: 'Intersight: correctable ECC errors for 3 runs'
+        priority: WARNING
+        description: 'See item "Memory: DIMMs with ECC errors". Persistent correctable errors often precede a DIMM failure.'
+    - uuid: 82520869680a45ea8aca66a507540e7b
+      name: 'Memory: uncorrectable ECC errors in window'
+      type: DEPENDENT
+      key: intersight.mem.ecc.uncorrectable
+      value_type: FLOAT
+      master_item:
+        key: intersight.raw
+      preprocessing:
+      - type: JSONPATH
+        parameters:
+        - $.mem_ecc_uncorrectable
+        error_handler: DISCARD_VALUE
+      tags:
+      - tag: component
+        value: memory
+      - tag: class
+        value: server
+      triggers:
+      - uuid: c652645a5bb44d1585f015a755ce5bc5
+        expression: last(/Cisco Intersight Server by push/intersight.mem.ecc.uncorrectable)>0
+        name: 'Intersight: {ITEM.LASTVALUE1} uncorrectable ECC error(s)'
+        priority: HIGH
+        description: 'See item "Memory: DIMMs with ECC errors".'
+        manual_close: 'YES'
+    - uuid: 271a62859a9740c5a35df62421f0cf8a
+      name: 'Memory: DIMMs with ECC errors'
+      type: DEPENDENT
+      key: intersight.mem.ecc.dimms
+      value_type: CHAR
+      master_item:
+        key: intersight.raw
+      history: 30d
+      trends: '0'
+      preprocessing:
+      - type: JSONPATH
+        parameters:
+        - $.mem_ecc_dimms
+        error_handler: DISCARD_VALUE
+      - type: DISCARD_UNCHANGED_HEARTBEAT
+        parameters:
+        - 1h
+      tags:
+      - tag: component
+        value: memory
+      - tag: class
+        value: server
+    - uuid: f09a4ba6007d414b91c5417d478bd70d
+      name: 'CPU: utilization'
+      type: DEPENDENT
+      key: intersight.cpu.util
+      value_type: FLOAT
+      master_item:
+        key: intersight.raw
+      units: '%'
+      preprocessing:
+      - type: JSONPATH
+        parameters:
+        - $.cpu_util
+        error_handler: DISCARD_VALUE
+      tags:
+      - tag: component
+        value: cpu
+      - tag: class
+        value: server
+      triggers:
+      - uuid: 36239e0d76374587962d14e7b7cc8db1
+        expression: min(/Cisco Intersight Server by push/intersight.cpu.util,30m)>{$INTERSIGHT.CPU.UTIL.WARN}
+        name: 'Intersight: CPU utilization above {$INTERSIGHT.CPU.UTIL.WARN}% for 30m'
+        priority: WARNING
+    - uuid: 1c8cb2cb324d406a8f446ab1c37b50be
+      name: 'CPU: busiest processor (peak)'
+      type: DEPENDENT
+      key: intersight.cpu.util.max
+      value_type: FLOAT
+      master_item:
+        key: intersight.raw
+      units: '%'
+      preprocessing:
+      - type: JSONPATH
+        parameters:
+        - $.cpu_util_max
+        error_handler: DISCARD_VALUE
+      tags:
+      - tag: component
+        value: cpu
+      - tag: class
+        value: server
+    - uuid: 3c74a6a8a253435282fc91dc3e33187f
+      name: Firmware (CIMC)
+      type: DEPENDENT
+      key: intersight.firmware
+      value_type: CHAR
+      master_item:
+        key: intersight.raw
+      history: 30d
+      trends: '0'
+      inventory_link: SOFTWARE
+      preprocessing:
+      - type: JSONPATH
+        parameters:
+        - $.firmware
+        error_handler: DISCARD_VALUE
+      - type: DISCARD_UNCHANGED_HEARTBEAT
+        parameters:
+        - 1d
+      tags:
+      - tag: component
+        value: inventory
+      - tag: class
+        value: server
+      triggers:
+      - uuid: a86d9fb2efad49b6aa4000808fd9e6bd
+        expression: change(/Cisco Intersight Server by push/intersight.firmware)=1
+        name: 'Intersight: firmware changed to {ITEM.LASTVALUE1}'
+        priority: INFO
+        manual_close: 'YES'
+    - uuid: 2c6e8c738bf5436abbbea4faf15f50c1
+      name: Management IP
+      type: DEPENDENT
+      key: intersight.mgmt.ip
+      value_type: CHAR
+      master_item:
+        key: intersight.raw
+      history: 7d
+      trends: '0'
+      inventory_link: OOB_IP
+      preprocessing:
+      - type: JSONPATH
+        parameters:
+        - $.mgmt_ip
+        error_handler: DISCARD_VALUE
+      - type: DISCARD_UNCHANGED_HEARTBEAT
+        parameters:
+        - 1d
+      tags:
+      - tag: component
+        value: inventory
+      - tag: class
+        value: server
+    - uuid: 2bab154794ca431f80897f6c9c318629
+      name: Power state
+      type: DEPENDENT
+      key: intersight.power.state
+      value_type: UNSIGNED
+      master_item:
+        key: intersight.raw
+      valuemap:
+        name: Power state
+      preprocessing:
+      - type: JSONPATH
+        parameters:
+        - $.power_state
+        error_handler: DISCARD_VALUE
+      tags:
+      - tag: component
+        value: power
+      - tag: class
+        value: server
+      triggers:
+      - uuid: f5666ec3a8d24b53b8ae8658ca8e4663
+        expression: last(/Cisco Intersight Server by push/intersight.power.state)=0
+        name: 'Intersight: server is powered off'
+        priority: AVERAGE
+        description: Use a maintenance period for planned shutdowns.
+        manual_close: 'YES'
+    discovery_rules:
+    - uuid: 6736e75cfb88446d87ba7ede30c4fdff
+      name: PSU discovery
+      type: DEPENDENT
+      key: intersight.psu.discovery
+      master_item:
+        key: intersight.raw
+      lifetime: 7d
+      lld_macro_paths:
+      - lld_macro: '{#PSU}'
+        path: $.name
+      preprocessing:
+      - type: JSONPATH
+        parameters:
+        - $.psus
+        error_handler: CUSTOM_VALUE
+        error_handler_params: '[]'
+      item_prototypes:
+      - uuid: 91272f7a25ee43da903e5e82ccba3e18
+        name: 'PSU {#PSU}: utilization'
+        type: DEPENDENT
+        key: intersight.psu.util[{#PSU}]
+        value_type: FLOAT
+        master_item:
+          key: intersight.raw
+        units: '%'
+        preprocessing:
+        - type: JSONPATH
+          parameters:
+          - $.psus[?(@.name=='{#PSU}')].util.first()
+          error_handler: DISCARD_VALUE
+        tags:
+        - tag: component
+          value: psu
+        - tag: psu
+          value: '{#PSU}'
+      - uuid: 63938147441e4f169f6ed686d6ba6e81
+        name: 'PSU {#PSU}: output power'
+        type: DEPENDENT
+        key: intersight.psu.out[{#PSU}]
+        value_type: FLOAT
+        master_item:
+          key: intersight.raw
+        units: W
+        preprocessing:
+        - type: JSONPATH
+          parameters:
+          - $.psus[?(@.name=='{#PSU}')].out_w.first()
+          error_handler: DISCARD_VALUE
+        tags:
+        - tag: component
+          value: psu
+        - tag: psu
+          value: '{#PSU}'
+      trigger_prototypes:
+      - uuid: 8ca0aaa800b14988a5ca1e0fe44e30f2
+        expression: min(/Cisco Intersight Server by push/intersight.psu.util[{#PSU}],15m)>{$INTERSIGHT.PSU.UTIL.WARN}
+        name: 'Intersight: PSU {#PSU} above {$INTERSIGHT.PSU.UTIL.WARN}% for 15m'
+        priority: WARNING
+        description: 'Little headroom left: losing the other PSU could overload this one.'
+    - uuid: 584ca6a89ad647e5b8830d584a07e8d2
+      name: Network port discovery
+      type: DEPENDENT
+      key: intersight.port.discovery
+      master_item:
+        key: intersight.raw
+      lifetime: 7d
+      filter:
+        evaltype: AND
+        conditions:
+        - macro: '{#PORT}'
+          value: '{$INTERSIGHT.PORT.MATCHES}'
+          formulaid: A
+        - macro: '{#PORT}'
+          value: '{$INTERSIGHT.PORT.NOT_MATCHES}'
+          operator: NOT_MATCHES_REGEX
+          formulaid: B
+      lld_macro_paths:
+      - lld_macro: '{#PORT}'
+        path: $.name
+      preprocessing:
+      - type: JSONPATH
+        parameters:
+        - $.ports
+        error_handler: CUSTOM_VALUE
+        error_handler_params: '[]'
+      item_prototypes:
+      - uuid: d78de6a6b9de44b280951a5dae42e325
+        name: 'Port {#PORT}: received'
+        type: DEPENDENT
+        key: intersight.port.rx[{#PORT}]
+        value_type: FLOAT
+        master_item:
+          key: intersight.raw
+        units: Bps
+        preprocessing:
+        - type: JSONPATH
+          parameters:
+          - $.ports[?(@.name=='{#PORT}')].rx_bps.first()
+          error_handler: DISCARD_VALUE
+        tags:
+        - tag: component
+          value: network
+        - tag: port
+          value: '{#PORT}'
+      - uuid: 3a967a4d36a0482d879cfbd2859690cc
+        name: 'Port {#PORT}: transmitted'
+        type: DEPENDENT
+        key: intersight.port.tx[{#PORT}]
+        value_type: FLOAT
+        master_item:
+          key: intersight.raw
+        units: Bps
+        preprocessing:
+        - type: JSONPATH
+          parameters:
+          - $.ports[?(@.name=='{#PORT}')].tx_bps.first()
+          error_handler: DISCARD_VALUE
+        tags:
+        - tag: component
+          value: network
+        - tag: port
+          value: '{#PORT}'
+      - uuid: acedfed65605466b9a3bf2fc1b9093dd
+        name: 'Port {#PORT}: errors in window'
+        type: DEPENDENT
+        key: intersight.port.errors[{#PORT}]
+        value_type: FLOAT
+        master_item:
+          key: intersight.raw
+        preprocessing:
+        - type: JSONPATH
+          parameters:
+          - $.ports[?(@.name=='{#PORT}')].errors.first()
+          error_handler: DISCARD_VALUE
+        tags:
+        - tag: component
+          value: network
+        - tag: port
+          value: '{#PORT}'
+      - uuid: 7b58a45289fa4768a82d2b7d0ff6090d
+        name: 'Port {#PORT}: bandwidth utilization'
+        type: DEPENDENT
+        key: intersight.port.util[{#PORT}]
+        value_type: FLOAT
+        master_item:
+          key: intersight.raw
+        units: '%'
+        preprocessing:
+        - type: JSONPATH
+          parameters:
+          - $.ports[?(@.name=='{#PORT}')].util.first()
+          error_handler: DISCARD_VALUE
+        tags:
+        - tag: component
+          value: network
+        - tag: port
+          value: '{#PORT}'
+      - uuid: 2c40c7f5feba492388a7d1e9c372eb21
+        name: 'Port {#PORT}: link state'
+        type: DEPENDENT
+        key: intersight.port.up[{#PORT}]
+        value_type: UNSIGNED
+        master_item:
+          key: intersight.raw
+        valuemap:
+          name: Link state
+        preprocessing:
+        - type: JSONPATH
+          parameters:
+          - $.ports[?(@.name=='{#PORT}')].up.first()
+          error_handler: DISCARD_VALUE
+        tags:
+        - tag: component
+          value: network
+        - tag: port
+          value: '{#PORT}'
+      trigger_prototypes:
+      - uuid: b71c852e58944cdaaf616978493e2588
+        expression: min(/Cisco Intersight Server by push/intersight.port.errors[{#PORT}],#3)>{$INTERSIGHT.PORT.ERRORS.WARN}
+        name: 'Intersight: port {#PORT} has errors for 3 runs'
+        priority: WARNING
+        description: Sum of hw.errors_network_receive_all and hw.errors_network_transmit_all over the telemetry window.
+      - uuid: 76a8c16ef0254bbf8be87b8e6bbb8e00
+        expression: min(/Cisco Intersight Server by push/intersight.port.util[{#PORT}],15m)>{$INTERSIGHT.PORT.UTIL.WARN}
+        name: 'Intersight: port {#PORT} bandwidth above {$INTERSIGHT.PORT.UTIL.WARN}% for 15m'
+        priority: WARNING
+      - uuid: 4cd8cc68e57c411ab4fb280e0c3c343b
+        expression: last(/Cisco Intersight Server by push/intersight.port.up[{#PORT}])=0 and max(/Cisco Intersight Server by push/intersight.port.up[{#PORT}],24h)=1
+        name: 'Intersight: port {#PORT} link down'
+        priority: AVERAGE
+        description: 'Fires only for links that were up during the last 24h, so unused ports stay silent. hw.network.up minimum over the window: a link down at least once reads as down.'
+        manual_close: 'YES'
+    tags:
+    - tag: class
+      value: hardware
+    - tag: target
+      value: cisco-intersight
+    macros:
+    - macro: '{$INTERSIGHT.NODATA}'
+      value: 20m
+      description: No pushed data for this long raises a warning.
+    - macro: '{$INTERSIGHT.TEMP.MARGIN.WARN}'
+      value: '10'
+      description: Warn when a sensor is this close (°C) to its critical threshold.
+    - macro: '{$INTERSIGHT.PORT.ERRORS.WARN}'
+      value: '0'
+      description: Port errors per telemetry window above this value raise a warning.
+    - macro: '{$INTERSIGHT.PORT.UTIL.WARN}'
+      value: '90'
+      description: Port bandwidth utilization threshold (%).
+    - macro: '{$INTERSIGHT.CPU.UTIL.WARN}'
+      value: '90'
+      description: CPU utilization threshold (%).
+    - macro: '{$INTERSIGHT.MEM.UTIL.WARN}'
+      value: '90'
+      description: Memory utilization threshold (%), Fabric Interconnects.
+    - macro: '{$INTERSIGHT.ECC.CORRECTABLE.WARN}'
+      value: '0'
+      description: Correctable ECC errors per window, sustained 3 runs.
+    - macro: '{$INTERSIGHT.PSU.UTIL.WARN}'
+      value: '80'
+      description: PSU utilization threshold (%). Reported by Fabric Interconnects only.
+    - macro: '{$INTERSIGHT.PORT.MATCHES}'
+      value: .*
+      description: Regex of ports to discover.
+    - macro: '{$INTERSIGHT.PORT.NOT_MATCHES}'
+      value: CHANGE_IF_NEEDED
+      description: Regex of ports to ignore.
+    valuemaps:
+    - uuid: 1b3b9acb37b44c5c96c7cb10f88550b1
+      name: Power state
+      mappings:
+      - value: '0'
+        newvalue: 'Off'
+      - value: '1'
+        newvalue: 'On'
+    - uuid: ffba4406dac84bcda3811faf14ea7ada
+      name: Link state
+      mappings:
+      - value: '0'
+        newvalue: Down
+      - value: '1'
+        newvalue: Up
+  - uuid: 0263297f16cb4b8780ddfa3da854ed69
+    template: Cisco Intersight Chassis by push
+    name: Cisco Intersight Chassis by push
+    description: 'Linked by host prototypes of "Cisco Intersight by API". Receives data via history.push; makes no API call itself. Class: chassis.'
+    vendor:
+      name: Custom
+      version: 7.0-5
+    groups:
+    - name: Templates/Cisco Intersight
+    items:
+    - uuid: d3bf7e536d0a445ba986af20d587f263
+      name: Raw data (pushed by Intersight collector)
+      type: TRAP
+      key: intersight.raw
+      history: 1h
+      value_type: TEXT
+      trends: '0'
+      description: Filled by the parent host "Cisco Intersight by API" through the history.push API method. If Allowed hosts is set, it must include the Zabbix frontend IP.
+      tags:
+      - tag: component
+        value: raw
+      - tag: class
+        value: chassis
+      triggers:
+      - uuid: 415d3288b33e4908bb127829d7eb17a1
+        expression: nodata(/Cisco Intersight Chassis by push/intersight.raw,{$INTERSIGHT.NODATA})=1
+        name: 'Intersight: no data pushed for {$INTERSIGHT.NODATA}'
+        priority: WARNING
+        description: Check the parent collector item (API errors, push errors, API token).
+    - uuid: 8089bcee6f3d4e56a231e57729c15b61
+      name: 'Alarms: critical'
+      type: DEPENDENT
+      key: intersight.alarms.critical
+      value_type: UNSIGNED
+      master_item:
+        key: intersight.raw
+      preprocessing:
+      - type: JSONPATH
+        parameters:
+        - $.alarm_critical
+        error_handler: DISCARD_VALUE
+      tags:
+      - tag: component
+        value: alarms
+      - tag: class
+        value: chassis
+      triggers:
+      - uuid: fa7b9086780b493f8d4a2aef4b81e273
+        expression: last(/Cisco Intersight Chassis by push/intersight.alarms.critical)>0
+        name: 'Intersight: {ITEM.LASTVALUE1} critical alarm(s)'
+        priority: HIGH
+    - uuid: 546ed23000444409bf6184c19d0505ce
+      name: 'Alarms: warning'
+      type: DEPENDENT
+      key: intersight.alarms.warning
+      value_type: UNSIGNED
+      master_item:
+        key: intersight.raw
+      preprocessing:
+      - type: JSONPATH
+        parameters:
+        - $.alarm_warning
+        error_handler: DISCARD_VALUE
+      tags:
+      - tag: component
+        value: alarms
+      - tag: class
+        value: chassis
+      triggers:
+      - uuid: 3d01efec7c784a099485e89c07696705
+        expression: last(/Cisco Intersight Chassis by push/intersight.alarms.warning)>0
+        name: 'Intersight: {ITEM.LASTVALUE1} warning alarm(s)'
+        priority: WARNING
+    - uuid: 8a0d4424e299462facfb930f5d4d8734
+      name: Model
+      type: DEPENDENT
+      key: intersight.model
+      value_type: CHAR
+      master_item:
+        key: intersight.raw
+      history: 7d
+      trends: '0'
+      inventory_link: MODEL
+      preprocessing:
+      - type: JSONPATH
+        parameters:
+        - $.model
+        error_handler: DISCARD_VALUE
+      - type: DISCARD_UNCHANGED_HEARTBEAT
+        parameters:
+        - 1d
+      tags:
+      - tag: component
+        value: inventory
+      - tag: class
+        value: chassis
+    - uuid: e72bb427df0048b5856d5cb857582a08
+      name: Serial number
+      type: DEPENDENT
+      key: intersight.serial
+      value_type: CHAR
+      master_item:
+        key: intersight.raw
+      history: 7d
+      trends: '0'
+      inventory_link: SERIALNO_A
+      preprocessing:
+      - type: JSONPATH
+        parameters:
+        - $.serial
+        error_handler: DISCARD_VALUE
+      - type: DISCARD_UNCHANGED_HEARTBEAT
+        parameters:
+        - 1d
+      tags:
+      - tag: component
+        value: inventory
+      - tag: class
+        value: chassis
+    - uuid: 9a89d3b771d94960ae55283e2dc02fbd
+      name: 'Power: average'
+      type: DEPENDENT
+      key: intersight.power
+      value_type: FLOAT
+      master_item:
+        key: intersight.raw
+      units: W
+      preprocessing:
+      - type: JSONPATH
+        parameters:
+        - $.power_w
+        error_handler: DISCARD_VALUE
+      tags:
+      - tag: component
+        value: power
+      - tag: class
+        value: chassis
+    - uuid: 5c31e77631ba457986415d767e1150d6
+      name: 'Power: peak'
+      type: DEPENDENT
+      key: intersight.power.max
+      value_type: FLOAT
+      master_item:
+        key: intersight.raw
+      units: W
+      preprocessing:
+      - type: JSONPATH
+        parameters:
+        - $.power_max_w
+        error_handler: DISCARD_VALUE
+      tags:
+      - tag: component
+        value: power
+      - tag: class
+        value: chassis
+    - uuid: 066d02df253d4c1995f483dcc35641c8
+      name: 'Temperature: hottest sensor'
+      type: DEPENDENT
+      key: intersight.temp.max
+      value_type: FLOAT
+      master_item:
+        key: intersight.raw
+      units: °C
+      preprocessing:
+      - type: JSONPATH
+        parameters:
+        - $.temp_max
+        error_handler: DISCARD_VALUE
+      tags:
+      - tag: component
+        value: thermal
+      - tag: class
+        value: chassis
+    - uuid: 913598ef05444830a402d098f3d2a5b3
+      name: 'Temperature: smallest margin to critical'
+      type: DEPENDENT
+      key: intersight.temp.margin
+      value_type: FLOAT
+      master_item:
+        key: intersight.raw
+      units: °C
+      preprocessing:
+      - type: JSONPATH
+        parameters:
+        - $.temp_margin_min
+        error_handler: DISCARD_VALUE
+      tags:
+      - tag: component
+        value: thermal
+      - tag: class
+        value: chassis
+      triggers:
+      - uuid: b7bac086188a48728cb8264e26446819
+        expression: max(/Cisco Intersight Chassis by push/intersight.temp.margin,15m)<{$INTERSIGHT.TEMP.MARGIN.WARN}
+        name: 'Intersight: a sensor is within {$INTERSIGHT.TEMP.MARGIN.WARN}°C of its critical threshold'
+        priority: HIGH
+        description: Margin = hw.temperature.limit_high_critical - hw.temperature, per sensor. Each sensor is compared with its own threshold.
+    - uuid: 856a7ff5cf7d4dd8bf561d171acd3a90
+      name: 'Temperature: smallest margin to non-critical threshold'
+      type: DEPENDENT
+      key: intersight.temp.margin.degraded
+      value_type: FLOAT
+      master_item:
+        key: intersight.raw
+      units: °C
+      preprocessing:
+      - type: JSONPATH
+        parameters:
+        - $.temp_margin_degraded_min
+        error_handler: DISCARD_VALUE
+      tags:
+      - tag: component
+        value: thermal
+      - tag: class
+        value: chassis
+      triggers:
+      - uuid: 29fe214fabdf4895a7d4525c3df2ebf4
+        expression: max(/Cisco Intersight Chassis by push/intersight.temp.margin.degraded,15m)<0
+        name: 'Intersight: a sensor is above its non-critical temperature threshold'
+        priority: WARNING
+        description: hw.temperature above hw.temperature.limit_high_degraded for 15m, on at least one sensor.
+    - uuid: 8b005851c10b4633b91c5678a7ac6558
+      name: 'Fans: lowest speed'
+      type: DEPENDENT
+      key: intersight.fan.min
+      value_type: FLOAT
+      master_item:
+        key: intersight.raw
+      units: rpm
+      preprocessing:
+      - type: JSONPATH
+        parameters:
+        - $.fan_min
+        error_handler: DISCARD_VALUE
+      tags:
+      - tag: component
+        value: fans
+      - tag: class
+        value: chassis
+    - uuid: b24e2bfbd0454015bf1d753692b4800f
+      name: 'Fans: smallest margin to lower critical speed'
+      type: DEPENDENT
+      key: intersight.fan.margin
+      value_type: FLOAT
+      master_item:
+        key: intersight.raw
+      units: rpm
+      preprocessing:
+      - type: JSONPATH
+        parameters:
+        - $.fan_margin_min
+        error_handler: DISCARD_VALUE
+      tags:
+      - tag: component
+        value: fans
+      - tag: class
+        value: chassis
+      triggers:
+      - uuid: 0ee0a3b522264472a3ad64894b624682
+        expression: max(/Cisco Intersight Chassis by push/intersight.fan.margin,15m)<0
+        name: 'Intersight: a fan is below its lower critical speed'
+        priority: AVERAGE
+        description: hw.fan.speed below hw.fan.speed.limit_low_critical for 15m, on at least one fan.
+    - uuid: 20f8bc357b4b462e84785c90fc9a2d25
+      name: 'Fans: highest speed'
+      type: DEPENDENT
+      key: intersight.fan.max
+      value_type: FLOAT
+      master_item:
+        key: intersight.raw
+      units: rpm
+      preprocessing:
+      - type: JSONPATH
+        parameters:
+        - $.fan_max
+        error_handler: DISCARD_VALUE
+      tags:
+      - tag: component
+        value: fans
+      - tag: class
+        value: chassis
+    - uuid: 8dc4e6df5d954daea6c4b06ddb291954
+      name: 'PSU: highest utilization'
+      type: DEPENDENT
+      key: intersight.psu.util.max
+      value_type: FLOAT
+      master_item:
+        key: intersight.raw
+      units: '%'
+      preprocessing:
+      - type: JSONPATH
+        parameters:
+        - $.psu_util_max
+        error_handler: DISCARD_VALUE
+      tags:
+      - tag: component
+        value: psu
+      - tag: class
+        value: chassis
+    - uuid: ad323a03a3484774bc0eff305614f546
+      name: 'Network: errors in window'
+      type: DEPENDENT
+      key: intersight.net.errors
+      value_type: FLOAT
+      master_item:
+        key: intersight.raw
+      preprocessing:
+      - type: JSONPATH
+        parameters:
+        - $.net_errors
+        error_handler: DISCARD_VALUE
+      tags:
+      - tag: component
+        value: network
+      - tag: class
+        value: chassis
+    - uuid: 1bb3dcb8624348ef9632c65909e03f65
+      name: 'Network: received'
+      type: DEPENDENT
+      key: intersight.net.rx
+      value_type: FLOAT
+      master_item:
+        key: intersight.raw
+      units: Bps
+      preprocessing:
+      - type: JSONPATH
+        parameters:
+        - $.net_rx_bps
+        error_handler: DISCARD_VALUE
+      tags:
+      - tag: component
+        value: network
+      - tag: class
+        value: chassis
+    - uuid: bd68b39da735412f93204fa1a29fff48
+      name: 'Network: transmitted'
+      type: DEPENDENT
+      key: intersight.net.tx
+      value_type: FLOAT
+      master_item:
+        key: intersight.raw
+      units: Bps
+      preprocessing:
+      - type: JSONPATH
+        parameters:
+        - $.net_tx_bps
+        error_handler: DISCARD_VALUE
+      tags:
+      - tag: component
+        value: network
+      - tag: class
+        value: chassis
+    - uuid: 5ac324a6becf4702a5e6062703528291
+      name: 'Energy: last 24h'
+      type: CALCULATED
+      key: intersight.energy.kwh.24h
+      delay: 1h
+      value_type: FLOAT
+      params: avg(//intersight.power,24h)*24/1000
+      units: kWh
+      tags:
+      - tag: component
+        value: energy
+      - tag: class
+        value: chassis
+    - uuid: 6fe76f24eb904e08b48186d091c50581
+      name: Operational state
+      type: DEPENDENT
+      key: intersight.oper.state
+      value_type: CHAR
+      master_item:
+        key: intersight.raw
+      history: 7d
+      trends: '0'
+      preprocessing:
+      - type: JSONPATH
+        parameters:
+        - $.oper_state
+        error_handler: DISCARD_VALUE
+      - type: DISCARD_UNCHANGED_HEARTBEAT
+        parameters:
+        - 1d
+      tags:
+      - tag: component
+        value: health
+      - tag: class
+        value: chassis
+    discovery_rules:
+    - uuid: d418930c966944df9ebf2adcdcb3b7cc
+      name: PSU discovery
+      type: DEPENDENT
+      key: intersight.psu.discovery
+      master_item:
+        key: intersight.raw
+      lifetime: 7d
+      lld_macro_paths:
+      - lld_macro: '{#PSU}'
+        path: $.name
+      preprocessing:
+      - type: JSONPATH
+        parameters:
+        - $.psus
+        error_handler: CUSTOM_VALUE
+        error_handler_params: '[]'
+      item_prototypes:
+      - uuid: 7e61f8b4cc1a48e78e7c9462ab2a1f67
+        name: 'PSU {#PSU}: utilization'
+        type: DEPENDENT
+        key: intersight.psu.util[{#PSU}]
+        value_type: FLOAT
+        master_item:
+          key: intersight.raw
+        units: '%'
+        preprocessing:
+        - type: JSONPATH
+          parameters:
+          - $.psus[?(@.name=='{#PSU}')].util.first()
+          error_handler: DISCARD_VALUE
+        tags:
+        - tag: component
+          value: psu
+        - tag: psu
+          value: '{#PSU}'
+      - uuid: 09a68e51cc064fb89ecf6de4d2c7a3d2
+        name: 'PSU {#PSU}: output power'
+        type: DEPENDENT
+        key: intersight.psu.out[{#PSU}]
+        value_type: FLOAT
+        master_item:
+          key: intersight.raw
+        units: W
+        preprocessing:
+        - type: JSONPATH
+          parameters:
+          - $.psus[?(@.name=='{#PSU}')].out_w.first()
+          error_handler: DISCARD_VALUE
+        tags:
+        - tag: component
+          value: psu
+        - tag: psu
+          value: '{#PSU}'
+      trigger_prototypes:
+      - uuid: de5e46c663214eda8eecf2f8a0199674
+        expression: min(/Cisco Intersight Chassis by push/intersight.psu.util[{#PSU}],15m)>{$INTERSIGHT.PSU.UTIL.WARN}
+        name: 'Intersight: PSU {#PSU} above {$INTERSIGHT.PSU.UTIL.WARN}% for 15m'
+        priority: WARNING
+        description: 'Little headroom left: losing the other PSU could overload this one.'
+    - uuid: 3306d252f46742428af27ff44fac5be3
+      name: Network port discovery
+      type: DEPENDENT
+      key: intersight.port.discovery
+      master_item:
+        key: intersight.raw
+      lifetime: 7d
+      filter:
+        evaltype: AND
+        conditions:
+        - macro: '{#PORT}'
+          value: '{$INTERSIGHT.PORT.MATCHES}'
+          formulaid: A
+        - macro: '{#PORT}'
+          value: '{$INTERSIGHT.PORT.NOT_MATCHES}'
+          operator: NOT_MATCHES_REGEX
+          formulaid: B
+      lld_macro_paths:
+      - lld_macro: '{#PORT}'
+        path: $.name
+      preprocessing:
+      - type: JSONPATH
+        parameters:
+        - $.ports
+        error_handler: CUSTOM_VALUE
+        error_handler_params: '[]'
+      item_prototypes:
+      - uuid: 7e405270b353458c8fe8163bc940c58a
+        name: 'Port {#PORT}: received'
+        type: DEPENDENT
+        key: intersight.port.rx[{#PORT}]
+        value_type: FLOAT
+        master_item:
+          key: intersight.raw
+        units: Bps
+        preprocessing:
+        - type: JSONPATH
+          parameters:
+          - $.ports[?(@.name=='{#PORT}')].rx_bps.first()
+          error_handler: DISCARD_VALUE
+        tags:
+        - tag: component
+          value: network
+        - tag: port
+          value: '{#PORT}'
+      - uuid: aed655d7211849b0957c104474c5a5bc
+        name: 'Port {#PORT}: transmitted'
+        type: DEPENDENT
+        key: intersight.port.tx[{#PORT}]
+        value_type: FLOAT
+        master_item:
+          key: intersight.raw
+        units: Bps
+        preprocessing:
+        - type: JSONPATH
+          parameters:
+          - $.ports[?(@.name=='{#PORT}')].tx_bps.first()
+          error_handler: DISCARD_VALUE
+        tags:
+        - tag: component
+          value: network
+        - tag: port
+          value: '{#PORT}'
+      - uuid: c15e862c54954f1db977c04bea43ea49
+        name: 'Port {#PORT}: errors in window'
+        type: DEPENDENT
+        key: intersight.port.errors[{#PORT}]
+        value_type: FLOAT
+        master_item:
+          key: intersight.raw
+        preprocessing:
+        - type: JSONPATH
+          parameters:
+          - $.ports[?(@.name=='{#PORT}')].errors.first()
+          error_handler: DISCARD_VALUE
+        tags:
+        - tag: component
+          value: network
+        - tag: port
+          value: '{#PORT}'
+      - uuid: 7d29f340a70c46fead304bcb61176cd8
+        name: 'Port {#PORT}: bandwidth utilization'
+        type: DEPENDENT
+        key: intersight.port.util[{#PORT}]
+        value_type: FLOAT
+        master_item:
+          key: intersight.raw
+        units: '%'
+        preprocessing:
+        - type: JSONPATH
+          parameters:
+          - $.ports[?(@.name=='{#PORT}')].util.first()
+          error_handler: DISCARD_VALUE
+        tags:
+        - tag: component
+          value: network
+        - tag: port
+          value: '{#PORT}'
+      - uuid: 7cf98f9d81d344e49500a32ce42f0aa1
+        name: 'Port {#PORT}: link state'
+        type: DEPENDENT
+        key: intersight.port.up[{#PORT}]
+        value_type: UNSIGNED
+        master_item:
+          key: intersight.raw
+        valuemap:
+          name: Link state
+        preprocessing:
+        - type: JSONPATH
+          parameters:
+          - $.ports[?(@.name=='{#PORT}')].up.first()
+          error_handler: DISCARD_VALUE
+        tags:
+        - tag: component
+          value: network
+        - tag: port
+          value: '{#PORT}'
+      trigger_prototypes:
+      - uuid: 7d1ff7c4b17a4409b66fb4da3dba631a
+        expression: min(/Cisco Intersight Chassis by push/intersight.port.errors[{#PORT}],#3)>{$INTERSIGHT.PORT.ERRORS.WARN}
+        name: 'Intersight: port {#PORT} has errors for 3 runs'
+        priority: WARNING
+        description: Sum of hw.errors_network_receive_all and hw.errors_network_transmit_all over the telemetry window.
+      - uuid: 3dd24a59febf40bc95e5461dc15cbada
+        expression: min(/Cisco Intersight Chassis by push/intersight.port.util[{#PORT}],15m)>{$INTERSIGHT.PORT.UTIL.WARN}
+        name: 'Intersight: port {#PORT} bandwidth above {$INTERSIGHT.PORT.UTIL.WARN}% for 15m'
+        priority: WARNING
+      - uuid: df4cb1b34ce444c6948e602aa6c777a7
+        expression: last(/Cisco Intersight Chassis by push/intersight.port.up[{#PORT}])=0 and max(/Cisco Intersight Chassis by push/intersight.port.up[{#PORT}],24h)=1
+        name: 'Intersight: port {#PORT} link down'
+        priority: AVERAGE
+        description: 'Fires only for links that were up during the last 24h, so unused ports stay silent. hw.network.up minimum over the window: a link down at least once reads as down.'
+        manual_close: 'YES'
+    tags:
+    - tag: class
+      value: hardware
+    - tag: target
+      value: cisco-intersight
+    macros:
+    - macro: '{$INTERSIGHT.NODATA}'
+      value: 20m
+      description: No pushed data for this long raises a warning.
+    - macro: '{$INTERSIGHT.TEMP.MARGIN.WARN}'
+      value: '10'
+      description: Warn when a sensor is this close (°C) to its critical threshold.
+    - macro: '{$INTERSIGHT.PORT.ERRORS.WARN}'
+      value: '0'
+      description: Port errors per telemetry window above this value raise a warning.
+    - macro: '{$INTERSIGHT.PORT.UTIL.WARN}'
+      value: '90'
+      description: Port bandwidth utilization threshold (%).
+    - macro: '{$INTERSIGHT.CPU.UTIL.WARN}'
+      value: '90'
+      description: CPU utilization threshold (%).
+    - macro: '{$INTERSIGHT.MEM.UTIL.WARN}'
+      value: '90'
+      description: Memory utilization threshold (%), Fabric Interconnects.
+    - macro: '{$INTERSIGHT.ECC.CORRECTABLE.WARN}'
+      value: '0'
+      description: Correctable ECC errors per window, sustained 3 runs.
+    - macro: '{$INTERSIGHT.PSU.UTIL.WARN}'
+      value: '80'
+      description: PSU utilization threshold (%). Reported by Fabric Interconnects only.
+    - macro: '{$INTERSIGHT.PORT.MATCHES}'
+      value: .*
+      description: Regex of ports to discover.
+    - macro: '{$INTERSIGHT.PORT.NOT_MATCHES}'
+      value: CHANGE_IF_NEEDED
+      description: Regex of ports to ignore.
+    valuemaps:
+    - uuid: 8e519c895f2b4f2484e9cecf27227d6a
+      name: Power state
+      mappings:
+      - value: '0'
+        newvalue: 'Off'
+      - value: '1'
+        newvalue: 'On'
+    - uuid: 00a0c02ca0a54a858d842ad2dc16f64a
+      name: Link state
+      mappings:
+      - value: '0'
+        newvalue: Down
+      - value: '1'
+        newvalue: Up
+  - uuid: ec0d6f3362774e3794bf9f5294250aac
+    template: Cisco Intersight FI by push
+    name: Cisco Intersight FI by push
+    description: 'Linked by host prototypes of "Cisco Intersight by API". Receives data via history.push; makes no API call itself. Class: Fabric Interconnects.'
+    vendor:
+      name: Custom
+      version: 7.0-5
+    groups:
+    - name: Templates/Cisco Intersight
+    items:
+    - uuid: b75779fb85fc495a94e86612d3da188e
+      name: Raw data (pushed by Intersight collector)
+      type: TRAP
+      key: intersight.raw
+      history: 1h
+      value_type: TEXT
+      trends: '0'
+      description: Filled by the parent host "Cisco Intersight by API" through the history.push API method. If Allowed hosts is set, it must include the Zabbix frontend IP.
+      tags:
+      - tag: component
+        value: raw
+      - tag: class
+        value: fi
+      triggers:
+      - uuid: febafb6a10c34442875ee2f38f6be5e7
+        expression: nodata(/Cisco Intersight FI by push/intersight.raw,{$INTERSIGHT.NODATA})=1
+        name: 'Intersight: no data pushed for {$INTERSIGHT.NODATA}'
+        priority: WARNING
+        description: Check the parent collector item (API errors, push errors, API token).
+    - uuid: 04b066a90ada4fb9a5f7aabc4a74d365
+      name: 'Alarms: critical'
+      type: DEPENDENT
+      key: intersight.alarms.critical
+      value_type: UNSIGNED
+      master_item:
+        key: intersight.raw
+      preprocessing:
+      - type: JSONPATH
+        parameters:
+        - $.alarm_critical
+        error_handler: DISCARD_VALUE
+      tags:
+      - tag: component
+        value: alarms
+      - tag: class
+        value: fi
+      triggers:
+      - uuid: d68e5c939ea742fab7c434f0e7faa659
+        expression: last(/Cisco Intersight FI by push/intersight.alarms.critical)>0
+        name: 'Intersight: {ITEM.LASTVALUE1} critical alarm(s)'
+        priority: HIGH
+    - uuid: 74d041f5ceb64c5cb4863e2cf9c06949
+      name: 'Alarms: warning'
+      type: DEPENDENT
+      key: intersight.alarms.warning
+      value_type: UNSIGNED
+      master_item:
+        key: intersight.raw
+      preprocessing:
+      - type: JSONPATH
+        parameters:
+        - $.alarm_warning
+        error_handler: DISCARD_VALUE
+      tags:
+      - tag: component
+        value: alarms
+      - tag: class
+        value: fi
+      triggers:
+      - uuid: 4bd832445b76457cb7559af2f7c59cf5
+        expression: last(/Cisco Intersight FI by push/intersight.alarms.warning)>0
+        name: 'Intersight: {ITEM.LASTVALUE1} warning alarm(s)'
+        priority: WARNING
+    - uuid: cb3f378b04664d6c9771c684cef914c5
+      name: Model
+      type: DEPENDENT
+      key: intersight.model
+      value_type: CHAR
+      master_item:
+        key: intersight.raw
+      history: 7d
+      trends: '0'
+      inventory_link: MODEL
+      preprocessing:
+      - type: JSONPATH
+        parameters:
+        - $.model
+        error_handler: DISCARD_VALUE
+      - type: DISCARD_UNCHANGED_HEARTBEAT
+        parameters:
+        - 1d
+      tags:
+      - tag: component
+        value: inventory
+      - tag: class
+        value: fi
+    - uuid: 8d15f0763d734b33b7ad13c5ad91bdbf
+      name: Serial number
+      type: DEPENDENT
+      key: intersight.serial
+      value_type: CHAR
+      master_item:
+        key: intersight.raw
+      history: 7d
+      trends: '0'
+      inventory_link: SERIALNO_A
+      preprocessing:
+      - type: JSONPATH
+        parameters:
+        - $.serial
+        error_handler: DISCARD_VALUE
+      - type: DISCARD_UNCHANGED_HEARTBEAT
+        parameters:
+        - 1d
+      tags:
+      - tag: component
+        value: inventory
+      - tag: class
+        value: fi
+    - uuid: 33a7ce5a984d4872a3d01c38d59b7e0f
+      name: 'Power: average'
+      type: DEPENDENT
+      key: intersight.power
+      value_type: FLOAT
+      master_item:
+        key: intersight.raw
+      units: W
+      preprocessing:
+      - type: JSONPATH
+        parameters:
+        - $.power_w
+        error_handler: DISCARD_VALUE
+      tags:
+      - tag: component
+        value: power
+      - tag: class
+        value: fi
+    - uuid: e4df93630e45451e9904ca0607dfae5b
+      name: 'Power: peak'
+      type: DEPENDENT
+      key: intersight.power.max
+      value_type: FLOAT
+      master_item:
+        key: intersight.raw
+      units: W
+      preprocessing:
+      - type: JSONPATH
+        parameters:
+        - $.power_max_w
+        error_handler: DISCARD_VALUE
+      tags:
+      - tag: component
+        value: power
+      - tag: class
+        value: fi
+    - uuid: 7b53b71bd5ea4c6d85155368ee4b7450
+      name: 'Temperature: hottest sensor'
+      type: DEPENDENT
+      key: intersight.temp.max
+      value_type: FLOAT
+      master_item:
+        key: intersight.raw
+      units: °C
+      preprocessing:
+      - type: JSONPATH
+        parameters:
+        - $.temp_max
+        error_handler: DISCARD_VALUE
+      tags:
+      - tag: component
+        value: thermal
+      - tag: class
+        value: fi
+    - uuid: 61a4125c4de04a34ba3776bbda47cc9e
+      name: 'Temperature: smallest margin to critical'
+      type: DEPENDENT
+      key: intersight.temp.margin
+      value_type: FLOAT
+      master_item:
+        key: intersight.raw
+      units: °C
+      preprocessing:
+      - type: JSONPATH
+        parameters:
+        - $.temp_margin_min
+        error_handler: DISCARD_VALUE
+      tags:
+      - tag: component
+        value: thermal
+      - tag: class
+        value: fi
+      triggers:
+      - uuid: 6fda1658f65d439eb053cde98cbaa259
+        expression: max(/Cisco Intersight FI by push/intersight.temp.margin,15m)<{$INTERSIGHT.TEMP.MARGIN.WARN}
+        name: 'Intersight: a sensor is within {$INTERSIGHT.TEMP.MARGIN.WARN}°C of its critical threshold'
+        priority: HIGH
+        description: Margin = hw.temperature.limit_high_critical - hw.temperature, per sensor. Each sensor is compared with its own threshold.
+    - uuid: 236844817a594806ac039a7abc9ea3a6
+      name: 'Temperature: smallest margin to non-critical threshold'
+      type: DEPENDENT
+      key: intersight.temp.margin.degraded
+      value_type: FLOAT
+      master_item:
+        key: intersight.raw
+      units: °C
+      preprocessing:
+      - type: JSONPATH
+        parameters:
+        - $.temp_margin_degraded_min
+        error_handler: DISCARD_VALUE
+      tags:
+      - tag: component
+        value: thermal
+      - tag: class
+        value: fi
+      triggers:
+      - uuid: 0837f2d509ed4dbfa879aecfa183e816
+        expression: max(/Cisco Intersight FI by push/intersight.temp.margin.degraded,15m)<0
+        name: 'Intersight: a sensor is above its non-critical temperature threshold'
+        priority: WARNING
+        description: hw.temperature above hw.temperature.limit_high_degraded for 15m, on at least one sensor.
+    - uuid: d7a3e867b177456aae89e2c0ae89dcbf
+      name: 'Fans: lowest speed'
+      type: DEPENDENT
+      key: intersight.fan.min
+      value_type: FLOAT
+      master_item:
+        key: intersight.raw
+      units: rpm
+      preprocessing:
+      - type: JSONPATH
+        parameters:
+        - $.fan_min
+        error_handler: DISCARD_VALUE
+      tags:
+      - tag: component
+        value: fans
+      - tag: class
+        value: fi
+    - uuid: c718058367f14de5a9f357febd3f3cc6
+      name: 'Fans: smallest margin to lower critical speed'
+      type: DEPENDENT
+      key: intersight.fan.margin
+      value_type: FLOAT
+      master_item:
+        key: intersight.raw
+      units: rpm
+      preprocessing:
+      - type: JSONPATH
+        parameters:
+        - $.fan_margin_min
+        error_handler: DISCARD_VALUE
+      tags:
+      - tag: component
+        value: fans
+      - tag: class
+        value: fi
+      triggers:
+      - uuid: 718d79fca6a24f2abd2c438b7d59e2fc
+        expression: max(/Cisco Intersight FI by push/intersight.fan.margin,15m)<0
+        name: 'Intersight: a fan is below its lower critical speed'
+        priority: AVERAGE
+        description: hw.fan.speed below hw.fan.speed.limit_low_critical for 15m, on at least one fan.
+    - uuid: 2e646b12a5124e21a5218ac5ce9b6881
+      name: 'Fans: highest speed'
+      type: DEPENDENT
+      key: intersight.fan.max
+      value_type: FLOAT
+      master_item:
+        key: intersight.raw
+      units: rpm
+      preprocessing:
+      - type: JSONPATH
+        parameters:
+        - $.fan_max
+        error_handler: DISCARD_VALUE
+      tags:
+      - tag: component
+        value: fans
+      - tag: class
+        value: fi
+    - uuid: 8711b8f862e24fc9a29d1f097c7cbfea
+      name: 'PSU: highest utilization'
+      type: DEPENDENT
+      key: intersight.psu.util.max
+      value_type: FLOAT
+      master_item:
+        key: intersight.raw
+      units: '%'
+      preprocessing:
+      - type: JSONPATH
+        parameters:
+        - $.psu_util_max
+        error_handler: DISCARD_VALUE
+      tags:
+      - tag: component
+        value: psu
+      - tag: class
+        value: fi
+    - uuid: a632102cea954f01b9179fa4475d2996
+      name: 'Network: errors in window'
+      type: DEPENDENT
+      key: intersight.net.errors
+      value_type: FLOAT
+      master_item:
+        key: intersight.raw
+      preprocessing:
+      - type: JSONPATH
+        parameters:
+        - $.net_errors
+        error_handler: DISCARD_VALUE
+      tags:
+      - tag: component
+        value: network
+      - tag: class
+        value: fi
+    - uuid: bb9a7ca40793432797c4c113f868ca20
+      name: 'Network: received'
+      type: DEPENDENT
+      key: intersight.net.rx
+      value_type: FLOAT
+      master_item:
+        key: intersight.raw
+      units: Bps
+      preprocessing:
+      - type: JSONPATH
+        parameters:
+        - $.net_rx_bps
+        error_handler: DISCARD_VALUE
+      tags:
+      - tag: component
+        value: network
+      - tag: class
+        value: fi
+    - uuid: 516f81f79ce848b787f10936a0596130
+      name: 'Network: transmitted'
+      type: DEPENDENT
+      key: intersight.net.tx
+      value_type: FLOAT
+      master_item:
+        key: intersight.raw
+      units: Bps
+      preprocessing:
+      - type: JSONPATH
+        parameters:
+        - $.net_tx_bps
+        error_handler: DISCARD_VALUE
+      tags:
+      - tag: component
+        value: network
+      - tag: class
+        value: fi
+    - uuid: cc27a5eb50f04d24a63da32d800ea1aa
+      name: 'Energy: last 24h'
+      type: CALCULATED
+      key: intersight.energy.kwh.24h
+      delay: 1h
+      value_type: FLOAT
+      params: avg(//intersight.power,24h)*24/1000
+      units: kWh
+      tags:
+      - tag: component
+        value: energy
+      - tag: class
+        value: fi
+    - uuid: 251cfa6460654ea2ac472f119ca60190
+      name: 'Memory: correctable ECC errors in window'
+      type: DEPENDENT
+      key: intersight.mem.ecc.correctable
+      value_type: FLOAT
+      master_item:
+        key: intersight.raw
+      preprocessing:
+      - type: JSONPATH
+        parameters:
+        - $.mem_ecc_correctable
+        error_handler: DISCARD_VALUE
+      tags:
+      - tag: component
+        value: memory
+      - tag: class
+        value: fi
+      triggers:
+      - uuid: 63b2a6f4139340caa59e9ee2e5e1c226
+        expression: min(/Cisco Intersight FI by push/intersight.mem.ecc.correctable,#3)>{$INTERSIGHT.ECC.CORRECTABLE.WARN}
+        name: 'Intersight: correctable ECC errors for 3 runs'
+        priority: WARNING
+        description: 'See item "Memory: DIMMs with ECC errors". Persistent correctable errors often precede a DIMM failure.'
+    - uuid: 398c84a2f49a4c94851ff3b2c828e3a4
+      name: 'Memory: uncorrectable ECC errors in window'
+      type: DEPENDENT
+      key: intersight.mem.ecc.uncorrectable
+      value_type: FLOAT
+      master_item:
+        key: intersight.raw
+      preprocessing:
+      - type: JSONPATH
+        parameters:
+        - $.mem_ecc_uncorrectable
+        error_handler: DISCARD_VALUE
+      tags:
+      - tag: component
+        value: memory
+      - tag: class
+        value: fi
+      triggers:
+      - uuid: c337e805e6cd449f9df18d2b7ef3a2dc
+        expression: last(/Cisco Intersight FI by push/intersight.mem.ecc.uncorrectable)>0
+        name: 'Intersight: {ITEM.LASTVALUE1} uncorrectable ECC error(s)'
+        priority: HIGH
+        description: 'See item "Memory: DIMMs with ECC errors".'
+        manual_close: 'YES'
+    - uuid: ce8258b564964e288841f6224fde8e2d
+      name: 'Memory: DIMMs with ECC errors'
+      type: DEPENDENT
+      key: intersight.mem.ecc.dimms
+      value_type: CHAR
+      master_item:
+        key: intersight.raw
+      history: 30d
+      trends: '0'
+      preprocessing:
+      - type: JSONPATH
+        parameters:
+        - $.mem_ecc_dimms
+        error_handler: DISCARD_VALUE
+      - type: DISCARD_UNCHANGED_HEARTBEAT
+        parameters:
+        - 1h
+      tags:
+      - tag: component
+        value: memory
+      - tag: class
+        value: fi
+    - uuid: 6721e809ddfb4909af5b881316ee7d15
+      name: 'CPU: utilization'
+      type: DEPENDENT
+      key: intersight.cpu.util
+      value_type: FLOAT
+      master_item:
+        key: intersight.raw
+      units: '%'
+      preprocessing:
+      - type: JSONPATH
+        parameters:
+        - $.cpu_util
+        error_handler: DISCARD_VALUE
+      tags:
+      - tag: component
+        value: cpu
+      - tag: class
+        value: fi
+      triggers:
+      - uuid: bafbf5f7f02c407fb36584e9cdca87ca
+        expression: min(/Cisco Intersight FI by push/intersight.cpu.util,30m)>{$INTERSIGHT.CPU.UTIL.WARN}
+        name: 'Intersight: CPU utilization above {$INTERSIGHT.CPU.UTIL.WARN}% for 30m'
+        priority: WARNING
+    - uuid: c67a5bc738574f4e80b5c95ae4130469
+      name: 'Memory: utilization'
+      type: DEPENDENT
+      key: intersight.mem.util
+      value_type: FLOAT
+      master_item:
+        key: intersight.raw
+      units: '%'
+      preprocessing:
+      - type: JSONPATH
+        parameters:
+        - $.mem_util
+        error_handler: DISCARD_VALUE
+      tags:
+      - tag: component
+        value: memory
+      - tag: class
+        value: fi
+      triggers:
+      - uuid: b37c6b640ca949819bba64675a5900cc
+        expression: min(/Cisco Intersight FI by push/intersight.mem.util,30m)>{$INTERSIGHT.MEM.UTIL.WARN}
+        name: 'Intersight: memory utilization above {$INTERSIGHT.MEM.UTIL.WARN}% for 30m'
+        priority: WARNING
+    - uuid: 86e74ec9a267459abfc4223a6850962f
+      name: Firmware
+      type: DEPENDENT
+      key: intersight.firmware
+      value_type: CHAR
+      master_item:
+        key: intersight.raw
+      history: 30d
+      trends: '0'
+      inventory_link: SOFTWARE
+      preprocessing:
+      - type: JSONPATH
+        parameters:
+        - $.firmware
+        error_handler: DISCARD_VALUE
+      - type: DISCARD_UNCHANGED_HEARTBEAT
+        parameters:
+        - 1d
+      tags:
+      - tag: component
+        value: inventory
+      - tag: class
+        value: fi
+      triggers:
+      - uuid: 679134eb0eed4291b72015547c4c798b
+        expression: change(/Cisco Intersight FI by push/intersight.firmware)=1
+        name: 'Intersight: firmware changed to {ITEM.LASTVALUE1}'
+        priority: INFO
+        manual_close: 'YES'
+    - uuid: ff12447a85594a8ca185ed9e23ff96b5
+      name: Management IP
+      type: DEPENDENT
+      key: intersight.mgmt.ip
+      value_type: CHAR
+      master_item:
+        key: intersight.raw
+      history: 7d
+      trends: '0'
+      inventory_link: OOB_IP
+      preprocessing:
+      - type: JSONPATH
+        parameters:
+        - $.mgmt_ip
+        error_handler: DISCARD_VALUE
+      - type: DISCARD_UNCHANGED_HEARTBEAT
+        parameters:
+        - 1d
+      tags:
+      - tag: component
+        value: inventory
+      - tag: class
+        value: fi
+    discovery_rules:
+    - uuid: 773e309eb53e4ca18a053328908f0acd
+      name: PSU discovery
+      type: DEPENDENT
+      key: intersight.psu.discovery
+      master_item:
+        key: intersight.raw
+      lifetime: 7d
+      lld_macro_paths:
+      - lld_macro: '{#PSU}'
+        path: $.name
+      preprocessing:
+      - type: JSONPATH
+        parameters:
+        - $.psus
+        error_handler: CUSTOM_VALUE
+        error_handler_params: '[]'
+      item_prototypes:
+      - uuid: 77934d36322e4252bab75c6ca2f3d716
+        name: 'PSU {#PSU}: utilization'
+        type: DEPENDENT
+        key: intersight.psu.util[{#PSU}]
+        value_type: FLOAT
+        master_item:
+          key: intersight.raw
+        units: '%'
+        preprocessing:
+        - type: JSONPATH
+          parameters:
+          - $.psus[?(@.name=='{#PSU}')].util.first()
+          error_handler: DISCARD_VALUE
+        tags:
+        - tag: component
+          value: psu
+        - tag: psu
+          value: '{#PSU}'
+      - uuid: 6764b038c362443db3d5d0e490999943
+        name: 'PSU {#PSU}: output power'
+        type: DEPENDENT
+        key: intersight.psu.out[{#PSU}]
+        value_type: FLOAT
+        master_item:
+          key: intersight.raw
+        units: W
+        preprocessing:
+        - type: JSONPATH
+          parameters:
+          - $.psus[?(@.name=='{#PSU}')].out_w.first()
+          error_handler: DISCARD_VALUE
+        tags:
+        - tag: component
+          value: psu
+        - tag: psu
+          value: '{#PSU}'
+      trigger_prototypes:
+      - uuid: b1954d98043d4c10841971f2098ab43e
+        expression: min(/Cisco Intersight FI by push/intersight.psu.util[{#PSU}],15m)>{$INTERSIGHT.PSU.UTIL.WARN}
+        name: 'Intersight: PSU {#PSU} above {$INTERSIGHT.PSU.UTIL.WARN}% for 15m'
+        priority: WARNING
+        description: 'Little headroom left: losing the other PSU could overload this one.'
+    - uuid: f5330bc280c64b0ea32675f20abfd98a
+      name: Network port discovery
+      type: DEPENDENT
+      key: intersight.port.discovery
+      master_item:
+        key: intersight.raw
+      lifetime: 7d
+      filter:
+        evaltype: AND
+        conditions:
+        - macro: '{#PORT}'
+          value: '{$INTERSIGHT.PORT.MATCHES}'
+          formulaid: A
+        - macro: '{#PORT}'
+          value: '{$INTERSIGHT.PORT.NOT_MATCHES}'
+          operator: NOT_MATCHES_REGEX
+          formulaid: B
+      lld_macro_paths:
+      - lld_macro: '{#PORT}'
+        path: $.name
+      preprocessing:
+      - type: JSONPATH
+        parameters:
+        - $.ports
+        error_handler: CUSTOM_VALUE
+        error_handler_params: '[]'
+      item_prototypes:
+      - uuid: 2cf3e113b887404895fa985b34b28f34
+        name: 'Port {#PORT}: received'
+        type: DEPENDENT
+        key: intersight.port.rx[{#PORT}]
+        value_type: FLOAT
+        master_item:
+          key: intersight.raw
+        units: Bps
+        preprocessing:
+        - type: JSONPATH
+          parameters:
+          - $.ports[?(@.name=='{#PORT}')].rx_bps.first()
+          error_handler: DISCARD_VALUE
+        tags:
+        - tag: component
+          value: network
+        - tag: port
+          value: '{#PORT}'
+      - uuid: 74a16dd12c47443a857c99101fc9fb5a
+        name: 'Port {#PORT}: transmitted'
+        type: DEPENDENT
+        key: intersight.port.tx[{#PORT}]
+        value_type: FLOAT
+        master_item:
+          key: intersight.raw
+        units: Bps
+        preprocessing:
+        - type: JSONPATH
+          parameters:
+          - $.ports[?(@.name=='{#PORT}')].tx_bps.first()
+          error_handler: DISCARD_VALUE
+        tags:
+        - tag: component
+          value: network
+        - tag: port
+          value: '{#PORT}'
+      - uuid: 4eae5701913b48c195d4ecaefbea6af9
+        name: 'Port {#PORT}: errors in window'
+        type: DEPENDENT
+        key: intersight.port.errors[{#PORT}]
+        value_type: FLOAT
+        master_item:
+          key: intersight.raw
+        preprocessing:
+        - type: JSONPATH
+          parameters:
+          - $.ports[?(@.name=='{#PORT}')].errors.first()
+          error_handler: DISCARD_VALUE
+        tags:
+        - tag: component
+          value: network
+        - tag: port
+          value: '{#PORT}'
+      - uuid: 6aaf6f8a65094b59be6472730ae82b90
+        name: 'Port {#PORT}: bandwidth utilization'
+        type: DEPENDENT
+        key: intersight.port.util[{#PORT}]
+        value_type: FLOAT
+        master_item:
+          key: intersight.raw
+        units: '%'
+        preprocessing:
+        - type: JSONPATH
+          parameters:
+          - $.ports[?(@.name=='{#PORT}')].util.first()
+          error_handler: DISCARD_VALUE
+        tags:
+        - tag: component
+          value: network
+        - tag: port
+          value: '{#PORT}'
+      - uuid: 4fdf0a86463f40638591d7b435810086
+        name: 'Port {#PORT}: link state'
+        type: DEPENDENT
+        key: intersight.port.up[{#PORT}]
+        value_type: UNSIGNED
+        master_item:
+          key: intersight.raw
+        valuemap:
+          name: Link state
+        preprocessing:
+        - type: JSONPATH
+          parameters:
+          - $.ports[?(@.name=='{#PORT}')].up.first()
+          error_handler: DISCARD_VALUE
+        tags:
+        - tag: component
+          value: network
+        - tag: port
+          value: '{#PORT}'
+      trigger_prototypes:
+      - uuid: 68f2e95adee342b3a1912bde43849902
+        expression: min(/Cisco Intersight FI by push/intersight.port.errors[{#PORT}],#3)>{$INTERSIGHT.PORT.ERRORS.WARN}
+        name: 'Intersight: port {#PORT} has errors for 3 runs'
+        priority: WARNING
+        description: Sum of hw.errors_network_receive_all and hw.errors_network_transmit_all over the telemetry window.
+      - uuid: ba9f456d1c364adc983938b7d4f8126d
+        expression: min(/Cisco Intersight FI by push/intersight.port.util[{#PORT}],15m)>{$INTERSIGHT.PORT.UTIL.WARN}
+        name: 'Intersight: port {#PORT} bandwidth above {$INTERSIGHT.PORT.UTIL.WARN}% for 15m'
+        priority: WARNING
+      - uuid: 8798e921d5254db98f83813e6449555e
+        expression: last(/Cisco Intersight FI by push/intersight.port.up[{#PORT}])=0 and max(/Cisco Intersight FI by push/intersight.port.up[{#PORT}],24h)=1
+        name: 'Intersight: port {#PORT} link down'
+        priority: AVERAGE
+        description: 'Fires only for links that were up during the last 24h, so unused ports stay silent. hw.network.up minimum over the window: a link down at least once reads as down.'
+        manual_close: 'YES'
+    tags:
+    - tag: class
+      value: hardware
+    - tag: target
+      value: cisco-intersight
+    macros:
+    - macro: '{$INTERSIGHT.NODATA}'
+      value: 20m
+      description: No pushed data for this long raises a warning.
+    - macro: '{$INTERSIGHT.TEMP.MARGIN.WARN}'
+      value: '10'
+      description: Warn when a sensor is this close (°C) to its critical threshold.
+    - macro: '{$INTERSIGHT.PORT.ERRORS.WARN}'
+      value: '0'
+      description: Port errors per telemetry window above this value raise a warning.
+    - macro: '{$INTERSIGHT.PORT.UTIL.WARN}'
+      value: '90'
+      description: Port bandwidth utilization threshold (%).
+    - macro: '{$INTERSIGHT.CPU.UTIL.WARN}'
+      value: '90'
+      description: CPU utilization threshold (%).
+    - macro: '{$INTERSIGHT.MEM.UTIL.WARN}'
+      value: '90'
+      description: Memory utilization threshold (%), Fabric Interconnects.
+    - macro: '{$INTERSIGHT.ECC.CORRECTABLE.WARN}'
+      value: '0'
+      description: Correctable ECC errors per window, sustained 3 runs.
+    - macro: '{$INTERSIGHT.PSU.UTIL.WARN}'
+      value: '80'
+      description: PSU utilization threshold (%). Reported by Fabric Interconnects only.
+    - macro: '{$INTERSIGHT.PORT.MATCHES}'
+      value: .*
+      description: Regex of ports to discover.
+    - macro: '{$INTERSIGHT.PORT.NOT_MATCHES}'
+      value: CHANGE_IF_NEEDED
+      description: Regex of ports to ignore.
+    valuemaps:
+    - uuid: 8f1d1990301449e391fb98910e95daca
+      name: Power state
+      mappings:
+      - value: '0'
+        newvalue: 'Off'
+      - value: '1'
+        newvalue: 'On'
+    - uuid: d567b014909947b9a1a8afdbfb93227a
+      name: Link state
+      mappings:
+      - value: '0'
+        newvalue: Down
+      - value: '1'
+        newvalue: Up
+  - uuid: 04927e64081d4df6a386bc1390e7d65c
+    template: Cisco Intersight by API
+    name: Cisco Intersight by API
+    description: 'Cisco Intersight (SaaS or appliance). Auth: API key v3 hs2019 (default), API key v2 rsa, or OAuth2. Creates one host per server / chassis / Fabric Interconnect and feeds them with history.push. Requires Zabbix 7.0+.'
+    vendor:
+      name: Custom
+      version: 7.0-5
+    groups:
+    - name: Templates/Cisco Intersight
+    items:
+    - uuid: 1cf2ccb12e164b978f34b653887283de
+      name: Intersight collector
+      type: SCRIPT
+      key: intersight.collect
+      delay: 5m
+      history: '0'
+      value_type: TEXT
+      trends: '0'
+      timeout: 120s
+      params: |
+        /*
+         * =====================================================================================
+         *  Cisco Intersight collector for Zabbix 7.0+ (Script item "intersight.collect")
+         * =====================================================================================
+         *
+         *  WHAT IT DOES (one run, every 5 minutes)
+         *    1. Reads the inventory from the Intersight REST API:
+         *         servers (rack + blade), chassis, Fabric Interconnects, unacknowledged alarms.
+         *    2. Reads telemetry (Apache Druid "groupBy" queries), grouped by device type and name:
+         *         power, temperatures, fans, power supplies, memory, CPU, network.
+         *    3. Builds one JSON object per device and pushes it, through the Zabbix API method
+         *       history.push, to the trapper item "intersight.raw" of the discovered host
+         *       "intersight-<Moid>".
+         *    4. Returns a JSON document used by the parent host: LLD rules, health items.
+         *
+         *  JAVASCRIPT ENGINE CONSTRAINTS (Duktape, embedded in Zabbix)
+         *    - ECMAScript 5.1 only: no let/const, no arrow functions, no template strings.
+         *    - Zabbix helpers used: HttpRequest, sha256(), sign() (RSA only).
+         *    - No elliptic-curve crypto is available, so ECDSA P-256 (API keys v3, "hs2019")
+         *      is implemented in pure JavaScript in the section "ECDSA P-256".
+         *
+         *  ITEM PARAMETERS (received as JSON in the variable "value")
+         *    auth           hs2019 (API key v3, EC) | rsa (API key v2) | oauth (client credentials)
+         *    key_id         API key ID (hs2019 / rsa)
+         *    private_key    private key: full PEM, PEM with literal "\n", or base64 body on one line
+         *    client_id      OAuth2 client ID (oauth)
+         *    client_secret  OAuth2 client secret (oauth)
+         *    api_host       Intersight FQDN, e.g. intersight.com
+         *    window         telemetry window in minutes
+         *    datasource     Druid dataSource of hardware metrics (Cisco doc: PhysicalEntities)
+         *    network_datasource  Druid dataSource of network metrics (Cisco doc: NetworkInterfaces)
+         *    component_dim  Druid attribute naming one PSU / sensor / port (Cisco doc: name)
+         *    flat_servers   1 = all servers in the "servers" LLD, 0 = rack servers only (7.4 nested)
+         *    zbx_url        Zabbix API URL, used by history.push
+         *    zbx_token      Zabbix API token, used by history.push
+         *
+         *  JSON CONTRACT WITH THE TEMPLATES (do not rename these fields without updating the YAML)
+         *    Device object (pushed to intersight.raw, and listed in servers / chassis / fis):
+         *      moid, name, display, class, model, serial, alarm_critical, alarm_warning,
+         *      power_w, power_max_w, power_source, power_state,
+         *      temp_max, temp_margin_min, temp_margin_degraded_min,
+         *      fan_min, fan_max, fan_margin_min, psu_util_max,
+         *      cpu_util, cpu_util_max, mem_util,
+         *      mem_ecc_correctable, mem_ecc_uncorrectable, mem_ecc_dimms,
+         *      net_rx_bps, net_tx_bps, net_errors,
+         *      firmware, mgmt_ip, oper_state, chassis_key, is_blade,
+         *      psus  [ {name, util, out_w} ],  ports [ {name, rx_bps, tx_bps, util, up, errors} ],
+         *      blades [ {moid, display, model} ]   (chassis only)
+         *    Returned document:
+         *      ts, api {calls, errors[], duration_ms, sign_ms}, counts {servers, chassis, fi},
+         *      alarms {critical, warning, info}, push {enabled, sent, failed},
+         *      servers[], chassis[], fis[], models [ {class, model, group} ]
+         *
+         *  METRIC SOURCES
+         *    Metric names: Intersight appliance doc "Supported Metrics" (on-prem, IMM metrics).
+         *    dataSources and per-device support: Cisco DevNet "Supported Metrics" pages
+         *    (the appliance doc does not list them).
+         *    The "Support information" of each metric tells which devices report it:
+         *      - hw.host.power ............. blades, racks, FI, UCSM chassis (NOT IMM chassis)
+         *      - hw.power_out (per PSU) .... chassis, FI, racks  -> used for IMM chassis power
+         *      - hw.power_supply.utilization  FI only
+         *      - only devices in a UCS domain (IMM / UCSM) appear in the support lists
+         *    Intersight Virtual Appliance: metrics need a metrics node (multi-node deployment)
+         *    or the opt-in collection of a single-node deployment.
+         *
+         *  WHERE TO CHANGE THINGS
+         *    - API endpoints ...................... INTERSIGHT_PATHS
+         *    - Telemetry metrics / field names .... TELEMETRY_QUERIES
+         *    - Fields read from the inventory ..... buildServerDevice / buildChassisDevice / buildFabricInterconnectDevice
+         *    - Host naming of discovered devices .. ZABBIX_HOST_PREFIX (must match the host prototypes)
+         * =====================================================================================
+         */
+
+        // =====================================================================================
+        //  1. CONFIGURATION
+        // =====================================================================================
+
+        var itemParameters = JSON.parse(value);
+
+        var CONFIG = {
+            authMode: String(itemParameters.auth || 'hs2019').toLowerCase(),
+            apiHost: itemParameters.api_host || 'intersight.com',
+            telemetryWindowMinutes: parseInt(itemParameters.window || '15', 10),
+            // Druid dataSources, as documented per instrument by Cisco.
+            druidPhysicalDataSource: itemParameters.datasource || 'PhysicalEntities',
+            druidNetworkDataSource: itemParameters.network_datasource || 'NetworkInterfaces',
+            druidComponentDimension: itemParameters.component_dim || 'name',
+            // When false, blades are left out of the "servers" LLD: they are discovered under
+            // their chassis instead (Zabbix 7.4 nested discovery). They are still pushed.
+            discoverBladesAsServers: String(itemParameters.flat_servers) !== '0',
+            // Push is enabled only when both URL and token are set (not left as raw macros).
+            pushEnabled: !!(itemParameters.zbx_url && itemParameters.zbx_token &&
+                itemParameters.zbx_url.indexOf('{$') !== 0)
+        };
+
+        var INTERSIGHT_PATHS = {
+            servers: '/api/v1/compute/PhysicalSummaries',
+            chassis: '/api/v1/equipment/Chasses',
+            fabricInterconnects: '/api/v1/network/ElementSummaries',
+            alarms: '/api/v1/cond/Alarms',
+            telemetryGroupBy: '/api/v1/telemetry/GroupBys',
+            oauthToken: '/iam/token'
+        };
+
+        // Only alarms still open and not acknowledged by an operator are counted.
+        var OPEN_ALARMS_FILTER = "Acknowledge eq 'None' and Severity ne 'Cleared'";
+
+        // Page size for list requests (Intersight maximum is 1000).
+        var PAGE_SIZE = 1000;
+        var MAX_ITEMS_PER_LIST = 20000;
+
+        // Discovered hosts are named "<prefix><Moid>". Must match the host prototypes.
+        var ZABBIX_HOST_PREFIX = 'intersight-';
+        var ZABBIX_RAW_ITEM_KEY = 'intersight.raw';
+
+        // Host group names used by the per-model aggregates (must match the group prototypes).
+        var HOST_GROUP_BY_CLASS = { server: 'Servers', chassis: 'Chassis', fi: 'FI' };
+
+        // Telemetry attribute "host.type" -> device class. Telemetry is matched to the
+        // inventory by (class, name): "host.name" alone is not unique (Cisco doc), and a
+        // chassis may share its name with a server.
+        var DEVICE_CLASS_BY_HOST_TYPE = {
+            'compute.Blade': 'server',
+            'compute.RackUnit': 'server',
+            'equipment.Chassis': 'chassis',
+            'network.Element': 'fi'
+        };
+        var UNKNOWN_DEVICE_CLASS = 'any';
+
+        // Run statistics, reported in the "api" section of the output.
+        var runStartTime = new Date().getTime();
+        var collectedErrors = [];
+        var apiCallCount = 0;
+        var signingTimeMs = 0;
+
+        // =====================================================================================
+        //  2. GENERIC HELPERS
+        // =====================================================================================
+
+        function padTwoDigits(number) {
+            return (number < 10 ? '0' : '') + number;
+        }
+
+        // RFC 7231 date ("Mon, 12 Oct 2026 10:00:00 GMT"), required by the HTTP signature.
+        // Built by hand because Duktape's toUTCString() format is not guaranteed.
+        function formatHttpDate(date) {
+            var dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+            var monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+            return dayNames[date.getUTCDay()] + ', ' + padTwoDigits(date.getUTCDate()) + ' ' +
+                monthNames[date.getUTCMonth()] + ' ' + date.getUTCFullYear() + ' ' +
+                padTwoDigits(date.getUTCHours()) + ':' + padTwoDigits(date.getUTCMinutes()) + ':' +
+                padTwoDigits(date.getUTCSeconds()) + ' GMT';
+        }
+
+        var BASE64_ALPHABET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
+
+        // Byte array -> base64 string.
+        function bytesToBase64(bytes) {
+            var output = '', index, triplet;
+            for (index = 0; index < bytes.length; index += 3) {
+                triplet = (bytes[index] << 16) | ((bytes[index + 1] || 0) << 8) | (bytes[index + 2] || 0);
+                output += BASE64_ALPHABET.charAt((triplet >> 18) & 63) + BASE64_ALPHABET.charAt((triplet >> 12) & 63) +
+                    (index + 1 < bytes.length ? BASE64_ALPHABET.charAt((triplet >> 6) & 63) : '=') +
+                    (index + 2 < bytes.length ? BASE64_ALPHABET.charAt(triplet & 63) : '=');
+            }
+            return output;
+        }
+
+        // Hex string (as returned by Zabbix sha256() / sign()) -> base64 string.
+        // Pure JS on purpose: btoa() is not reliable with binary data in Duktape.
+        function hexToBase64(hexString) {
+            var bytes = [], index;
+            for (index = 0; index < hexString.length; index += 2) {
+                bytes.push(parseInt(hexString.substr(index, 2), 16));
+            }
+            return bytesToBase64(bytes);
+        }
+
+        // Base64 string (whitespace and PEM noise ignored) -> byte array.
+        function base64ToBytes(base64String) {
+            var bytes = [], buffer = 0, bufferedBits = 0, index;
+            var cleaned = base64String.replace(/[^A-Za-z0-9+\/]/g, '');
+            for (index = 0; index < cleaned.length; index++) {
+                buffer = (buffer << 6) | BASE64_ALPHABET.indexOf(cleaned.charAt(index));
+                bufferedBits += 6;
+                if (bufferedBits >= 8) {
+                    bufferedBits -= 8;
+                    bytes.push((buffer >> bufferedBits) & 255);
+                }
+            }
+            return bytes;
+        }
+
+        // Returns the value if it is a finite number, otherwise null.
+        function numberOrNull(candidate) {
+            return (typeof candidate === 'number' && isFinite(candidate)) ? candidate : null;
+        }
+
+        // numerator / denominator, or null if either is missing or the denominator is 0.
+        function divideOrNull(numerator, denominator) {
+            numerator = numberOrNull(numerator);
+            denominator = numberOrNull(denominator);
+            return (numerator !== null && denominator) ? numerator / denominator : null;
+        }
+
+        // Lowest of two values, ignoring nulls.
+        function minIgnoringNull(first, second) {
+            if (first === null || first === undefined) { return second; }
+            if (second === null || second === undefined) { return first; }
+            return Math.min(first, second);
+        }
+
+        function roundToOneDecimal(number) {
+            return number === null ? null : Math.round(number * 10) / 10;
+        }
+
+        // Highest of two values, ignoring nulls.
+        function maxIgnoringNull(first, second) {
+            if (first === null || first === undefined) { return second; }
+            if (second === null || second === undefined) { return first; }
+            return Math.max(first, second);
+        }
+
+        // Sets object[key] only when the value is meaningful. Missing keys make the dependent
+        // items discard the value instead of storing a wrong 0 or failing on "null".
+        function setIfPresent(targetObject, key, candidate) {
+            if (candidate !== null && candidate !== undefined && candidate !== '') {
+                targetObject[key] = candidate;
+            }
+        }
+
+        function objectValues(sourceObject) {
+            var values = [], key;
+            for (key in sourceObject) {
+                if (sourceObject.hasOwnProperty(key)) { values.push(sourceObject[key]); }
+            }
+            return values;
+        }
+
+        // Runs a collection step. On failure, records the error and returns null, so that one
+        // failing endpoint or metric never stops the rest of the collection.
+        function runStepOrRecordError(stepName, stepFunction) {
+            try {
+                return stepFunction();
+            }
+            catch (error) {
+                collectedErrors.push(stepName + ': ' + error);
+                return null;
+            }
+        }
+
+        // =====================================================================================
+        //  3. ECDSA P-256 / SHA-256 IN PURE JAVASCRIPT (for API keys v3, "hs2019")
+        // =====================================================================================
+        //  Why: Zabbix sign() only supports RSA. Intersight API keys v3 are EC keys on the
+        //  P-256 curve (prime256v1), signed with ECDSA + SHA-256, signature DER-encoded.
+        //
+        //  Standards implemented:
+        //    - FIPS 180-4  SHA-256          - RFC 2104  HMAC
+        //    - SEC 1 / FIPS 186-4  ECDSA    - RFC 6979  deterministic nonce ("k")
+        //  The deterministic nonce matters for security: a predictable random nonce in ECDSA
+        //  reveals the private key. Math.random() is therefore never used.
+        //
+        //  Numbers are 256-bit integers stored as 16 "limbs" of 16 bits, least significant
+        //  first. Multiplications modulo p (curve field) and n (curve order) use Montgomery
+        //  multiplication, which avoids costly divisions.
+        //
+        //  Validated against the RFC 6979 test vector A.2.5 and against OpenSSL verification.
+        // =====================================================================================
+        // ===== BEGIN EcdsaP256 =====
+        var EcdsaP256 = (function () {
+            var LIMB_COUNT = 16;        // 16 limbs x 16 bits = 256 bits
+            var LIMB_BASE = 65536;      // 2^16
+
+            // ---------------------------------------------------------------- SHA-256 (bytes)
+            var SHA256_ROUND_CONSTANTS = [
+                0x428a2f98, 0x71374491, 0xb5c0fbcf, 0xe9b5dba5, 0x3956c25b, 0x59f111f1, 0x923f82a4, 0xab1c5ed5,
+                0xd807aa98, 0x12835b01, 0x243185be, 0x550c7dc3, 0x72be5d74, 0x80deb1fe, 0x9bdc06a7, 0xc19bf174,
+                0xe49b69c1, 0xefbe4786, 0x0fc19dc6, 0x240ca1cc, 0x2de92c6f, 0x4a7484aa, 0x5cb0a9dc, 0x76f988da,
+                0x983e5152, 0xa831c66d, 0xb00327c8, 0xbf597fc7, 0xc6e00bf3, 0xd5a79147, 0x06ca6351, 0x14292967,
+                0x27b70a85, 0x2e1b2138, 0x4d2c6dfc, 0x53380d13, 0x650a7354, 0x766a0abb, 0x81c2c92e, 0x92722c85,
+                0xa2bfe8a1, 0xa81a664b, 0xc24b8b70, 0xc76c51a3, 0xd192e819, 0xd6990624, 0xf40e3585, 0x106aa070,
+                0x19a4c116, 0x1e376c08, 0x2748774c, 0x34b0bcb5, 0x391c0cb3, 0x4ed8aa4a, 0x5b9cca4f, 0x682e6ff3,
+                0x748f82ee, 0x78a5636f, 0x84c87814, 0x8cc70208, 0x90befffa, 0xa4506ceb, 0xbef9a3f7, 0xc67178f2];
+
+            function rotateRight32(word, bits) {
+                return (word >>> bits) | (word << (32 - bits));
+            }
+
+            // SHA-256 of a byte array, returns a 32-byte array.
+            // (Zabbix sha256() works on strings and returns hex; here we need raw bytes for HMAC.)
+            function sha256Bytes(messageBytes) {
+                var state = [0x6a09e667, 0xbb67ae85, 0x3c6ef372, 0xa54ff53a, 0x510e527f, 0x9b05688c, 0x1f83d9ab, 0x5be0cd19];
+                var padded = messageBytes.slice(0), bitLength = messageBytes.length * 8;
+                var schedule = [], blockStart, round, digest = [];
+                var a, b, c, d, e, f, g, h, temp1, temp2, sigma0, sigma1;
+
+                // Padding: 0x80, zeros, then the 64-bit message length (fits in 32 bits here).
+                padded.push(0x80);
+                while (padded.length % 64 !== 56) { padded.push(0); }
+                padded.push(0, 0, 0, 0, (bitLength >>> 24) & 255, (bitLength >>> 16) & 255, (bitLength >>> 8) & 255, bitLength & 255);
+
+                for (blockStart = 0; blockStart < padded.length; blockStart += 64) {
+                    for (round = 0; round < 16; round++) {
+                        schedule[round] = (padded[blockStart + 4 * round] << 24) | (padded[blockStart + 4 * round + 1] << 16) |
+                            (padded[blockStart + 4 * round + 2] << 8) | padded[blockStart + 4 * round + 3];
+                    }
+                    for (round = 16; round < 64; round++) {
+                        sigma0 = rotateRight32(schedule[round - 15], 7) ^ rotateRight32(schedule[round - 15], 18) ^ (schedule[round - 15] >>> 3);
+                        sigma1 = rotateRight32(schedule[round - 2], 17) ^ rotateRight32(schedule[round - 2], 19) ^ (schedule[round - 2] >>> 10);
+                        schedule[round] = (schedule[round - 16] + sigma0 + schedule[round - 7] + sigma1) | 0;
+                    }
+                    a = state[0]; b = state[1]; c = state[2]; d = state[3];
+                    e = state[4]; f = state[5]; g = state[6]; h = state[7];
+                    for (round = 0; round < 64; round++) {
+                        temp1 = (h + (rotateRight32(e, 6) ^ rotateRight32(e, 11) ^ rotateRight32(e, 25)) +
+                            ((e & f) ^ (~e & g)) + SHA256_ROUND_CONSTANTS[round] + schedule[round]) | 0;
+                        temp2 = ((rotateRight32(a, 2) ^ rotateRight32(a, 13) ^ rotateRight32(a, 22)) +
+                            ((a & b) ^ (a & c) ^ (b & c))) | 0;
+                        h = g; g = f; f = e; e = (d + temp1) | 0;
+                        d = c; c = b; b = a; a = (temp1 + temp2) | 0;
+                    }
+                    state[0] = (state[0] + a) | 0; state[1] = (state[1] + b) | 0;
+                    state[2] = (state[2] + c) | 0; state[3] = (state[3] + d) | 0;
+                    state[4] = (state[4] + e) | 0; state[5] = (state[5] + f) | 0;
+                    state[6] = (state[6] + g) | 0; state[7] = (state[7] + h) | 0;
+                }
+                for (round = 0; round < 8; round++) {
+                    digest.push((state[round] >>> 24) & 255, (state[round] >>> 16) & 255, (state[round] >>> 8) & 255, state[round] & 255);
+                }
+                return digest;
+            }
+
+            // HMAC-SHA256 (RFC 2104) on byte arrays.
+            function hmacSha256(keyBytes, messageBytes) {
+                var blockKey = keyBytes.length > 64 ? sha256Bytes(keyBytes) : keyBytes.slice(0);
+                var innerPad = [], outerPad = [], index;
+                while (blockKey.length < 64) { blockKey.push(0); }
+                for (index = 0; index < 64; index++) {
+                    innerPad.push(blockKey[index] ^ 0x36);
+                    outerPad.push(blockKey[index] ^ 0x5c);
+                }
+                return sha256Bytes(outerPad.concat(sha256Bytes(innerPad.concat(messageBytes))));
+            }
+
+            // String -> UTF-8 byte array (the signing string is ASCII in practice).
+            function stringToUtf8Bytes(text) {
+                var bytes = [], index, code;
+                for (index = 0; index < text.length; index++) {
+                    code = text.charCodeAt(index);
+                    if (code < 0x80) {
+                        bytes.push(code);
+                    }
+                    else if (code < 0x800) {
+                        bytes.push(0xc0 | (code >> 6), 0x80 | (code & 63));
+                    }
+                    else {
+                        bytes.push(0xe0 | (code >> 12), 0x80 | ((code >> 6) & 63), 0x80 | (code & 63));
+                    }
+                }
+                return bytes;
+            }
+
+            // ---------------------------------------------------------------- 256-bit integers
+            // 32 big-endian bytes -> 16 little-endian limbs.
+            function bigIntFromBytes(bytes) {
+                var limbs = [], index;
+                for (index = 0; index < LIMB_COUNT; index++) {
+                    limbs.push(bytes[31 - 2 * index] + 256 * bytes[30 - 2 * index]);
+                }
+                return limbs;
+            }
+
+            // 16 little-endian limbs -> 32 big-endian bytes.
+            function bigIntToBytes(limbs) {
+                var bytes = [], index;
+                for (index = LIMB_COUNT - 1; index >= 0; index--) {
+                    bytes.push(Math.floor(limbs[index] / 256), limbs[index] % 256);
+                }
+                return bytes;
+            }
+
+            // 64 hex characters -> limbs.
+            function bigIntFromHex(hexString) {
+                var bytes = [], index;
+                for (index = 0; index < 64; index += 2) {
+                    bytes.push(parseInt(hexString.substr(index, 2), 16));
+                }
+                return bigIntFromBytes(bytes);
+            }
+
+            // Returns 1 if first > second, -1 if first < second, 0 if equal.
+            function compareBigInt(first, second) {
+                var index;
+                for (index = LIMB_COUNT - 1; index >= 0; index--) {
+                    if (first[index] !== second[index]) { return first[index] > second[index] ? 1 : -1; }
+                }
+                return 0;
+            }
+
+            function isBigIntZero(number) {
+                var index;
+                for (index = 0; index < LIMB_COUNT; index++) {
+                    if (number[index]) { return false; }
+                }
+                return true;
+            }
+
+            // Value of bit "bitIndex" (0 = least significant).
+            function getBit(number, bitIndex) {
+                return (number[bitIndex >> 4] >> (bitIndex & 15)) & 1;
+            }
+
+            // first - second, assuming first >= second.
+            function subtractBigInt(first, second) {
+                var result = [], index, difference, borrow = 0;
+                for (index = 0; index < LIMB_COUNT; index++) {
+                    difference = first[index] - second[index] - borrow;
+                    if (difference < 0) { difference += LIMB_BASE; borrow = 1; } else { borrow = 0; }
+                    result.push(difference);
+                }
+                return result;
+            }
+
+            // (first + second) mod modulus, with first, second < modulus.
+            function addModular(first, second, modulus) {
+                var result = [], index, sum, carry = 0;
+                for (index = 0; index < LIMB_COUNT; index++) {
+                    sum = first[index] + second[index] + carry;
+                    carry = sum >= LIMB_BASE ? 1 : 0;
+                    result.push(sum - carry * LIMB_BASE);
+                }
+                return (carry || compareBigInt(result, modulus) >= 0) ? subtractBigInt(result, modulus) : result;
+            }
+
+            // (first - second) mod modulus, with first, second < modulus.
+            function subtractModular(first, second, modulus) {
+                if (compareBigInt(first, second) >= 0) { return subtractBigInt(first, second); }
+                return addModular(subtractBigInt(modulus, second), first, modulus);
+            }
+
+            // ---------------------------------------------------------------- Montgomery field
+            // Arithmetic modulo an odd modulus m, with values kept in "Montgomery form"
+            // (x * R mod m, R = 2^256). Constants are precomputed for P-256:
+            //   rModHex          R mod m       (the number 1 in Montgomery form)
+            //   rSquaredModHex   R^2 mod m     (used to convert into Montgomery form)
+            //   negInverseLimb   -m^-1 mod 2^16
+            function MontgomeryField(modulusHex, rModHex, rSquaredModHex, negInverseLimb) {
+                this.modulus = bigIntFromHex(modulusHex);
+                this.oneMontgomery = bigIntFromHex(rModHex);
+                this.rSquared = bigIntFromHex(rSquaredModHex);
+                this.negInverseLimb = negInverseLimb;
+            }
+
+            // Montgomery product: first * second * R^-1 mod m (CIOS algorithm).
+            // Intermediate values stay below 2^53, so plain JavaScript numbers are exact.
+            MontgomeryField.prototype.multiply = function (first, second) {
+                var modulus = this.modulus, accumulator = [], outer, inner, value, carry, reductionFactor;
+                for (outer = 0; outer < LIMB_COUNT + 2; outer++) { accumulator.push(0); }
+
+                for (outer = 0; outer < LIMB_COUNT; outer++) {
+                    // accumulator += first[outer] * second
+                    carry = 0;
+                    for (inner = 0; inner < LIMB_COUNT; inner++) {
+                        value = accumulator[inner] + first[outer] * second[inner] + carry;
+                        carry = Math.floor(value / LIMB_BASE);
+                        accumulator[inner] = value - carry * LIMB_BASE;
+                    }
+                    value = accumulator[LIMB_COUNT] + carry;
+                    carry = Math.floor(value / LIMB_BASE);
+                    accumulator[LIMB_COUNT] = value - carry * LIMB_BASE;
+                    accumulator[LIMB_COUNT + 1] += carry;
+
+                    // accumulator += reductionFactor * modulus, which zeroes the lowest limb,
+                    // then shift everything down by one limb.
+                    reductionFactor = (accumulator[0] * this.negInverseLimb) % LIMB_BASE;
+                    value = accumulator[0] + reductionFactor * modulus[0];
+                    carry = Math.floor(value / LIMB_BASE);
+                    for (inner = 1; inner < LIMB_COUNT; inner++) {
+                        value = accumulator[inner] + reductionFactor * modulus[inner] + carry;
+                        carry = Math.floor(value / LIMB_BASE);
+                        accumulator[inner - 1] = value - carry * LIMB_BASE;
+                    }
+                    value = accumulator[LIMB_COUNT] + carry;
+                    carry = Math.floor(value / LIMB_BASE);
+                    accumulator[LIMB_COUNT - 1] = value - carry * LIMB_BASE;
+                    accumulator[LIMB_COUNT] = accumulator[LIMB_COUNT + 1] + carry;
+                    accumulator[LIMB_COUNT + 1] = 0;
+                }
+                value = accumulator.slice(0, LIMB_COUNT);
+                return (accumulator[LIMB_COUNT] || compareBigInt(value, modulus) >= 0) ? subtractBigInt(value, modulus) : value;
+            };
+
+            MontgomeryField.prototype.toMontgomery = function (number) {
+                return this.multiply(number, this.rSquared);
+            };
+
+            MontgomeryField.prototype.fromMontgomery = function (number) {
+                var plainOne = [1], index;
+                for (index = 1; index < LIMB_COUNT; index++) { plainOne.push(0); }
+                return this.multiply(number, plainOne);
+            };
+
+            MontgomeryField.prototype.add = function (first, second) {
+                return addModular(first, second, this.modulus);
+            };
+
+            MontgomeryField.prototype.subtract = function (first, second) {
+                return subtractModular(first, second, this.modulus);
+            };
+
+            // Modular inverse by Fermat's little theorem: number^(m-2) mod m (m is prime).
+            MontgomeryField.prototype.invert = function (numberMontgomery) {
+                var two = bigIntFromHex('0000000000000000000000000000000000000000000000000000000000000002');
+                var exponent = subtractBigInt(this.modulus, two);
+                var result = this.oneMontgomery, bitIndex;
+                for (bitIndex = 255; bitIndex >= 0; bitIndex--) {
+                    result = this.multiply(result, result);
+                    if (getBit(exponent, bitIndex)) { result = this.multiply(result, numberMontgomery); }
+                }
+                return result;
+            };
+
+            // ---------------------------------------------------------------- curve P-256
+            // Field of coordinates (modulo p) and field of scalars (modulo n, the curve order).
+            var COORDINATE_FIELD = new MontgomeryField(
+                'ffffffff00000001000000000000000000000000ffffffffffffffffffffffff',
+                '00000000fffffffeffffffffffffffffffffffff000000000000000000000001',
+                '00000004fffffffdfffffffffffffffefffffffbffffffff0000000000000003', 1);
+            var SCALAR_FIELD = new MontgomeryField(
+                'ffffffff00000000ffffffffffffffffbce6faada7179e84f3b9cac2fc632551',
+                '00000000ffffffff00000000000000004319055258e8617b0c46353d039cdaaf',
+                '66e12d94f3d956202845b2392b6bec594699799c49bd6fa683244c95be79eea2', 48207);
+            var CURVE_ORDER = SCALAR_FIELD.modulus;
+
+            // Generator point G, in Montgomery form.
+            var GENERATOR_X = COORDINATE_FIELD.toMontgomery(bigIntFromHex('6b17d1f2e12c4247f8bce6e563a440f277037d812deb33a0f4a13945d898c296'));
+            var GENERATOR_Y = COORDINATE_FIELD.toMontgomery(bigIntFromHex('4fe342e2fe1a7f9b8ee7eb4a7c0f9e162bce33576b315ececbb6406837bf51f5'));
+
+            // Points are in Jacobian coordinates [X, Y, Z] (affine x = X/Z^2, y = Y/Z^3), which
+            // avoids one modular inversion per operation.
+
+            // 2 * point. Formula "dbl-2001-b" (curve parameter a = -3).
+            function doublePoint(point) {
+                var field = COORDINATE_FIELD, x = point[0], y = point[1], z = point[2];
+                var zSquared = field.multiply(z, z);
+                var ySquared = field.multiply(y, y);
+                var xTimesYSquared = field.multiply(x, ySquared);
+                var product = field.multiply(field.subtract(x, zSquared), field.add(x, zSquared));
+                var slope = field.add(field.add(product, product), product);                 // 3(x - z^2)(x + z^2)
+                var fourXy2 = field.add(xTimesYSquared, xTimesYSquared);
+                fourXy2 = field.add(fourXy2, fourXy2);
+                var newX = field.subtract(field.multiply(slope, slope), field.add(fourXy2, fourXy2));
+                var yPlusZ = field.add(y, z);
+                var newZ = field.subtract(field.subtract(field.multiply(yPlusZ, yPlusZ), ySquared), zSquared);
+                var eightY4 = field.multiply(ySquared, ySquared);
+                eightY4 = field.add(eightY4, eightY4);
+                eightY4 = field.add(eightY4, eightY4);
+                eightY4 = field.add(eightY4, eightY4);
+                var newY = field.subtract(field.multiply(slope, field.subtract(fourXy2, newX)), eightY4);
+                return [newX, newY, newZ];
+            }
+
+            // point + G. Mixed addition "madd-2007-bl" (G has Z = 1).
+            function addGeneratorToPoint(point) {
+                var field = COORDINATE_FIELD, x = point[0], y = point[1], z = point[2];
+                var zSquared = field.multiply(z, z);
+                var generatorXScaled = field.multiply(GENERATOR_X, zSquared);
+                var generatorYScaled = field.multiply(field.multiply(GENERATOR_Y, z), zSquared);
+                var deltaX = field.subtract(generatorXScaled, x);
+                var deltaXSquared = field.multiply(deltaX, deltaX);
+                var fourDeltaXSquared = field.add(deltaXSquared, deltaXSquared);
+                fourDeltaXSquared = field.add(fourDeltaXSquared, fourDeltaXSquared);
+                var deltaXCubedTimes4 = field.multiply(deltaX, fourDeltaXSquared);
+                var twiceDeltaY = field.subtract(generatorYScaled, y);
+                twiceDeltaY = field.add(twiceDeltaY, twiceDeltaY);
+                var xScaled = field.multiply(x, fourDeltaXSquared);
+                var newX = field.subtract(field.subtract(field.multiply(twiceDeltaY, twiceDeltaY), deltaXCubedTimes4),
+                    field.add(xScaled, xScaled));
+                var yTerm = field.multiply(y, deltaXCubedTimes4);
+                var newY = field.subtract(field.multiply(twiceDeltaY, field.subtract(xScaled, newX)), field.add(yTerm, yTerm));
+                var zPlusDeltaX = field.add(z, deltaX);
+                var newZ = field.subtract(field.subtract(field.multiply(zPlusDeltaX, zPlusDeltaX), zSquared), deltaXSquared);
+                return [newX, newY, newZ];
+            }
+
+            // scalar * G with "double and add" from the most significant bit.
+            // Returns only the affine x coordinate (plain form), which is all ECDSA needs.
+            function multiplyGeneratorAffineX(scalar) {
+                var bitIndex = 255, point, zInverse;
+                while (!getBit(scalar, bitIndex)) { bitIndex--; }
+                point = [GENERATOR_X, GENERATOR_Y, COORDINATE_FIELD.oneMontgomery];   // highest bit = G
+                for (bitIndex = bitIndex - 1; bitIndex >= 0; bitIndex--) {
+                    point = doublePoint(point);
+                    if (getBit(scalar, bitIndex)) { point = addGeneratorToPoint(point); }
+                }
+                zInverse = COORDINATE_FIELD.invert(point[2]);
+                return COORDINATE_FIELD.fromMontgomery(
+                    COORDINATE_FIELD.multiply(point[0], COORDINATE_FIELD.multiply(zInverse, zInverse)));
+            }
+
+            // ---------------------------------------------------------------- key parsing
+            // OID 1.2.840.10045.3.1.7 (prime256v1 / P-256), DER-encoded.
+            var P256_CURVE_OID_DER = [0x06, 0x08, 0x2a, 0x86, 0x48, 0xce, 0x3d, 0x03, 0x01, 0x07];
+            // "INTEGER 1, OCTET STRING of 32 bytes": header right before the private scalar,
+            // identical in SEC 1 ("EC PRIVATE KEY") and in PKCS#8 ("PRIVATE KEY") keys.
+            var PRIVATE_SCALAR_HEADER_DER = [0x02, 0x01, 0x01, 0x04, 0x20];
+
+            function indexOfBytes(haystack, needle) {
+                var start, offset;
+                for (start = 0; start + needle.length <= haystack.length; start++) {
+                    for (offset = 0; offset < needle.length && haystack[start + offset] === needle[offset]; offset++) { }
+                    if (offset === needle.length) { return start; }
+                }
+                return -1;
+            }
+
+            // PEM (or base64 body) -> 32-byte private scalar "d".
+            function parsePrivateKey(pemText) {
+                var base64Body = String(pemText).replace(/\\n/g, '\n').replace(/-----[^-]+-----/g, '');
+                var derBytes = base64ToBytes(base64Body), headerPosition;
+                if (indexOfBytes(derBytes, P256_CURVE_OID_DER) < 0) {
+                    throw 'EC key is not on curve P-256 (prime256v1)';
+                }
+                headerPosition = indexOfBytes(derBytes, PRIVATE_SCALAR_HEADER_DER);
+                if (headerPosition < 0) {
+                    throw 'Cannot find the EC private scalar in the key';
+                }
+                return derBytes.slice(headerPosition + PRIVATE_SCALAR_HEADER_DER.length,
+                    headerPosition + PRIVATE_SCALAR_HEADER_DER.length + 32);
+            }
+
+            // ---------------------------------------------------------------- ECDSA signature
+            // Big-endian unsigned bytes -> DER INTEGER (minimal length, positive).
+            function encodeDerInteger(bytes) {
+                var content = bytes.slice(0);
+                while (content.length > 1 && content[0] === 0 && content[1] < 0x80) { content.shift(); }
+                if (content[0] >= 0x80) { content.unshift(0); }
+                return [0x02, content.length].concat(content);
+            }
+
+            // Signs "message" with the private scalar. Returns a DER signature (byte array):
+            // SEQUENCE { INTEGER r, INTEGER s }.
+            function signMessage(privateScalarBytes, message) {
+                var hashAsNumber = bigIntFromBytes(sha256Bytes(stringToUtf8Bytes(message)));
+                var privateScalar = bigIntFromBytes(privateScalarBytes);
+                var privateScalarMontgomery, hashReducedBytes, nonceV = [], nonceK = [], index;
+                var nonce, pointX, signatureR, signatureS, derBody;
+
+                if (compareBigInt(hashAsNumber, CURVE_ORDER) >= 0) {
+                    hashAsNumber = subtractBigInt(hashAsNumber, CURVE_ORDER);
+                }
+                hashReducedBytes = bigIntToBytes(hashAsNumber);
+                privateScalarMontgomery = SCALAR_FIELD.toMontgomery(privateScalar);
+
+                // RFC 6979 section 3.2: derive the nonce from the key and the message hash.
+                for (index = 0; index < 32; index++) { nonceV.push(1); nonceK.push(0); }
+                nonceK = hmacSha256(nonceK, nonceV.concat([0], privateScalarBytes, hashReducedBytes));
+                nonceV = hmacSha256(nonceK, nonceV);
+                nonceK = hmacSha256(nonceK, nonceV.concat([1], privateScalarBytes, hashReducedBytes));
+                nonceV = hmacSha256(nonceK, nonceV);
+
+                for (;;) {
+                    nonceV = hmacSha256(nonceK, nonceV);
+                    nonce = bigIntFromBytes(nonceV);
+
+                    if (!isBigIntZero(nonce) && compareBigInt(nonce, CURVE_ORDER) < 0) {
+                        // r = (nonce * G).x mod n
+                        pointX = multiplyGeneratorAffineX(nonce);
+                        signatureR = compareBigInt(pointX, CURVE_ORDER) >= 0 ? subtractBigInt(pointX, CURVE_ORDER) : pointX;
+
+                        if (!isBigIntZero(signatureR)) {
+                            // s = nonce^-1 * (hash + r * privateKey) mod n
+                            signatureS = SCALAR_FIELD.fromMontgomery(SCALAR_FIELD.multiply(
+                                SCALAR_FIELD.invert(SCALAR_FIELD.toMontgomery(nonce)),
+                                SCALAR_FIELD.add(SCALAR_FIELD.toMontgomery(hashAsNumber),
+                                    SCALAR_FIELD.multiply(SCALAR_FIELD.toMontgomery(signatureR), privateScalarMontgomery))));
+
+                            if (!isBigIntZero(signatureS)) {
+                                derBody = encodeDerInteger(bigIntToBytes(signatureR)).concat(encodeDerInteger(bigIntToBytes(signatureS)));
+                                return [0x30, derBody.length].concat(derBody);
+                            }
+                        }
+                    }
+                    // Candidate rejected (practically never happens): next candidate per RFC 6979.
+                    nonceK = hmacSha256(nonceK, nonceV.concat([0]));
+                    nonceV = hmacSha256(nonceK, nonceV);
+                }
+            }
+
+            return {
+                parsePrivateKey: parsePrivateKey,
+                signToBase64: function (privateScalarBytes, message) {
+                    return bytesToBase64(signMessage(privateScalarBytes, message));
+                }
+            };
+        }());
+        // ===== END EcdsaP256 =====
+
+        // =====================================================================================
+        //  4. INTERSIGHT AUTHENTICATION
+        // =====================================================================================
+        //  hs2019 : API key v3 (EC P-256), ECDSA computed by EcdsaP256 above
+        //  rsa    : API key v2, HTTP signature "rsa-sha256" computed by Zabbix sign()
+        //  oauth  : OAuth2 client credentials on /iam/token, then "Authorization: Bearer"
+
+        var intersightHttp = new HttpRequest();
+        var rsaPrivateKeyPem = null;
+        var ecPrivateScalar = null;
+        var oauthAccessToken = null;
+
+        // Rebuilds a multi-line PEM from a one-line macro value (Zabbix sign() needs PEM).
+        function buildRsaPem(keyText) {
+            var normalized = String(keyText).replace(/\\n/g, '\n'), base64Body, lines = [], index;
+            if (normalized.indexOf('-----BEGIN') === 0) { return normalized; }
+            base64Body = normalized.replace(/\s+/g, '');
+            for (index = 0; index < base64Body.length; index += 64) { lines.push(base64Body.substr(index, 64)); }
+            return '-----BEGIN RSA PRIVATE KEY-----\n' + lines.join('\n') + '\n-----END RSA PRIVATE KEY-----\n';
+        }
+
+        function requestOAuthAccessToken() {
+            var responseBody, statusCode, tokenResponse;
+            intersightHttp.clearHeader();
+            intersightHttp.addHeader('Content-Type: application/x-www-form-urlencoded');
+            intersightHttp.addHeader('Accept: application/json');
+            responseBody = intersightHttp.post('https://' + CONFIG.apiHost + INTERSIGHT_PATHS.oauthToken,
+                'grant_type=client_credentials' +
+                '&client_id=' + encodeURIComponent(itemParameters.client_id) +
+                '&client_secret=' + encodeURIComponent(itemParameters.client_secret));
+            apiCallCount++;
+            statusCode = intersightHttp.getStatus();
+            if (statusCode !== 200) {
+                throw 'OAuth2 token request -> HTTP ' + statusCode + ': ' + String(responseBody).substring(0, 200);
+            }
+            tokenResponse = JSON.parse(responseBody);
+            if (!tokenResponse.access_token) { throw 'OAuth2 token response without access_token'; }
+            return tokenResponse.access_token;
+        }
+
+        // Prepares the credentials once per run, according to the auth mode.
+        function initializeAuthentication() {
+            if (CONFIG.authMode === 'oauth') {
+                oauthAccessToken = requestOAuthAccessToken();
+            }
+            else if (CONFIG.authMode === 'hs2019' || CONFIG.authMode === 'ec') {
+                CONFIG.authMode = 'hs2019';
+                ecPrivateScalar = EcdsaP256.parsePrivateKey(itemParameters.private_key);
+            }
+            else if (CONFIG.authMode === 'rsa') {
+                if (String(itemParameters.private_key).indexOf('EC PRIVATE KEY') !== -1) {
+                    throw 'EC key given with auth=rsa: set {$INTERSIGHT.AUTH} to hs2019';
+                }
+                rsaPrivateKeyPem = buildRsaPem(itemParameters.private_key);
+            }
+            else {
+                throw 'Unknown auth mode: ' + CONFIG.authMode;
+            }
+        }
+
+        // Adds the authentication headers for one request.
+        //   httpMethod       'GET' or 'POST'
+        //   pathWithQuery    path + query string, exactly as sent (it is part of the signature)
+        //   requestBody      body string ('' for GET)
+        function addAuthenticationHeaders(httpMethod, pathWithQuery, requestBody) {
+            var requestTarget, httpDate, bodyDigest, signingString, signature, signingStart;
+
+            if (CONFIG.authMode === 'oauth') {
+                intersightHttp.addHeader('Authorization: Bearer ' + oauthAccessToken);
+                return;
+            }
+
+            // HTTP signature (draft-cavage-http-signatures): the signed headers are rebuilt
+            // here as "name: value" lines, in the order announced in the "headers" parameter.
+            requestTarget = '(request-target): ' + httpMethod.toLowerCase() + ' ' + pathWithQuery;
+            httpDate = formatHttpDate(new Date());
+            bodyDigest = 'SHA-256=' + hexToBase64(sha256(requestBody));   // digest even for empty GET bodies
+
+            intersightHttp.addHeader('Host: ' + CONFIG.apiHost);
+            intersightHttp.addHeader('Date: ' + httpDate);
+            intersightHttp.addHeader('Digest: ' + bodyDigest);
+
+            if (CONFIG.authMode === 'hs2019') {
+                signingString = requestTarget + '\n' + 'host: ' + CONFIG.apiHost + '\n' +
+                    'date: ' + httpDate + '\n' + 'digest: ' + bodyDigest;
+                signingStart = new Date().getTime();
+                signature = EcdsaP256.signToBase64(ecPrivateScalar, signingString);
+                signingTimeMs += new Date().getTime() - signingStart;
+                intersightHttp.addHeader('Authorization: Signature keyId="' + itemParameters.key_id + '",' +
+                    'algorithm="hs2019",headers="(request-target) host date digest",signature="' + signature + '"');
+            }
+            else {
+                signingString = requestTarget + '\n' + 'date: ' + httpDate + '\n' +
+                    'digest: ' + bodyDigest + '\n' + 'host: ' + CONFIG.apiHost;
+                signature = sign('sha256', rsaPrivateKeyPem, signingString);
+                // The Zabbix documentation does not state the output encoding: convert if hex.
+                if (/^[0-9a-fA-F]+$/.test(signature)) { signature = hexToBase64(signature); }
+                intersightHttp.addHeader('Authorization: Signature keyId="' + itemParameters.key_id + '",' +
+                    'algorithm="rsa-sha256",headers="(request-target) date digest host",signature="' + signature + '"');
+            }
+        }
+
+        // =====================================================================================
+        //  5. INTERSIGHT API CLIENT
+        // =====================================================================================
+
+        // Sends one authenticated request and returns the parsed JSON response.
+        // Throws on any HTTP status other than 200.
+        function callIntersightApi(httpMethod, pathWithQuery, bodyObject) {
+            var requestBody = bodyObject ? JSON.stringify(bodyObject) : '';
+            var url = 'https://' + CONFIG.apiHost + pathWithQuery;
+            var responseBody, statusCode;
+
+            intersightHttp.clearHeader();
+            intersightHttp.addHeader('Accept: application/json');
+            intersightHttp.addHeader('Content-Type: application/json');
+            addAuthenticationHeaders(httpMethod, pathWithQuery, requestBody);
+
+            responseBody = (httpMethod === 'GET') ? intersightHttp.get(url) : intersightHttp.post(url, requestBody);
+            apiCallCount++;
+            statusCode = intersightHttp.getStatus();
+            if (statusCode !== 200) {
+                throw httpMethod + ' ' + pathWithQuery.split('?')[0] + ' -> HTTP ' + statusCode + ': ' +
+                    String(responseBody).substring(0, 200);
+            }
+            return JSON.parse(responseBody);
+        }
+
+        // Reads every page of an Intersight list endpoint ($top / $skip paging).
+        //   odataFilter   optional $filter expression
+        //   odataSelect   optional comma-separated $select field list
+        function listAllObjects(path, odataFilter, odataSelect) {
+            var allObjects = [], skip = 0, page, queryString;
+            do {
+                queryString = '?$top=' + PAGE_SIZE + '&$skip=' + skip +
+                    (odataFilter ? '&$filter=' + encodeURIComponent(odataFilter) : '') +
+                    (odataSelect ? '&$select=' + encodeURIComponent(odataSelect) : '');
+                page = callIntersightApi('GET', path + queryString);
+                allObjects = allObjects.concat(page.Results || []);
+                skip += PAGE_SIZE;
+            } while (page.Results && page.Results.length === PAGE_SIZE && skip < MAX_ITEMS_PER_LIST);
+            return allObjects;
+        }
+
+        // Runs a Druid "groupBy" query over the telemetry window, for one instrument
+        // (e.g. "hw.host"), and returns the result rows as flat objects.
+        function runTelemetryGroupBy(dataSource, instrumentName, groupByDimensions, aggregations, timeInterval) {
+            var response = callIntersightApi('POST', INTERSIGHT_PATHS.telemetryGroupBy, {
+                queryType: 'groupBy',
+                dataSource: dataSource,
+                granularity: 'all',                 // one result per group for the whole window
+                intervals: [timeInterval],
+                dimensions: groupByDimensions,
+                filter: { type: 'selector', dimension: 'instrument.name', value: instrumentName },
+                aggregations: aggregations
+            });
+            var rows = [], index;
+            for (index = 0; index < response.length; index++) {
+                // Druid returns {event: {...}}; other shapes are accepted defensively.
+                rows.push(response[index].event || response[index].result || response[index]);
+            }
+            return rows;
+        }
+
+        // =====================================================================================
+        //  6. TELEMETRY DEFINITIONS
+        // =====================================================================================
+        //  One entry per Druid query. To add a metric: add an entry here, add the field to the
+        //  device object in buildCommonDeviceFields(), then add a dependent item in the template.
+        //
+        //    instrument     Druid "instrument.name" value
+        //    dataSource     'physical' or 'network' (Cisco documents one dataSource per instrument)
+        //    perComponent   true = also grouped by the component dimension (one row per PSU/port)
+        //    aggregations   Druid aggregators. Intersight stores each metric as fields such as
+        //                   <metric> (sum), <metric>_count, <metric>_max, <metric>_min:
+        //                   average = sum / count.
+        //    storeRow       copies one result row into the telemetry of its device
+        //                   (and of its component when perComponent is true)
+        //
+        //  Field names follow the Cisco DevNet "Supported Metrics" pages. A metric that a device
+        //  does not report simply returns no row: the matching Zabbix item stays empty.
+
+        var TELEMETRY_QUERIES = [
+            {
+                // Power of a server or FI. Not reported by IMM chassis: their power is
+                // computed from the PSU output (see hw.power_supply).
+                instrument: 'hw.host',
+                dataSource: 'physical',
+                perComponent: false,
+                aggregations: [
+                    { type: 'doubleSum', name: 'powerSum', fieldName: 'hw.host.power' },
+                    { type: 'longSum', name: 'powerCount', fieldName: 'hw.host.power_count' },
+                    { type: 'doubleMax', name: 'powerMax', fieldName: 'hw.host.power_max' }
+                ],
+                storeRow: function (row, deviceTelemetry) {
+                    deviceTelemetry.power_w = roundToOneDecimal(divideOrNull(row.powerSum, row.powerCount));
+                    deviceTelemetry.power_max_w = roundToOneDecimal(numberOrNull(row.powerMax));
+                }
+            },
+            {
+                // Grouped per sensor, so that each sensor is compared with its OWN thresholds:
+                //   limit_high_degraded = non-critical threshold, limit_high_critical = critical.
+                // A fixed threshold does not fit CPU, inlet and PSU sensors at the same time.
+                // CPU temperatures are only reported while the host is powered on.
+                instrument: 'hw.temperature',
+                dataSource: 'physical',
+                perComponent: true,
+                aggregations: [
+                    { type: 'doubleMax', name: 'temperatureMax', fieldName: 'hw.temperature_max' },
+                    { type: 'doubleMin', name: 'highCriticalLimit', fieldName: 'hw.temperature.limit_high_critical_min' },
+                    { type: 'doubleMin', name: 'highDegradedLimit', fieldName: 'hw.temperature.limit_high_degraded_min' }
+                ],
+                storeRow: function (row, deviceTelemetry) {
+                    var temperature = numberOrNull(row.temperatureMax);
+                    var highCriticalLimit = numberOrNull(row.highCriticalLimit);
+                    var highDegradedLimit = numberOrNull(row.highDegradedLimit);
+                    deviceTelemetry.temp_max = maxIgnoringNull(deviceTelemetry.temp_max, roundToOneDecimal(temperature));
+                    if (temperature === null) { return; }
+                    // Margins = distance to each threshold (negative = threshold exceeded).
+                    if (highCriticalLimit !== null && highCriticalLimit > 0) {
+                        deviceTelemetry.temp_margin_min = minIgnoringNull(deviceTelemetry.temp_margin_min,
+                            roundToOneDecimal(highCriticalLimit - temperature));
+                    }
+                    if (highDegradedLimit !== null && highDegradedLimit > 0) {
+                        deviceTelemetry.temp_margin_degraded_min = minIgnoringNull(deviceTelemetry.temp_margin_degraded_min,
+                            roundToOneDecimal(highDegradedLimit - temperature));
+                    }
+                }
+            },
+            {
+                // Grouped per fan, to compare each fan with its own lower critical speed.
+                instrument: 'hw.fan',
+                dataSource: 'physical',
+                perComponent: true,
+                aggregations: [
+                    { type: 'doubleMin', name: 'fanSpeedMin', fieldName: 'hw.fan.speed_min' },
+                    { type: 'doubleMax', name: 'fanSpeedMax', fieldName: 'hw.fan.speed_max' },
+                    { type: 'doubleMax', name: 'lowCriticalLimit', fieldName: 'hw.fan.speed.limit_low_critical_max' }
+                ],
+                storeRow: function (row, deviceTelemetry) {
+                    var speedMin = numberOrNull(row.fanSpeedMin);
+                    var lowCriticalLimit = numberOrNull(row.lowCriticalLimit);
+                    deviceTelemetry.fan_min = minIgnoringNull(deviceTelemetry.fan_min, roundToOneDecimal(speedMin));
+                    deviceTelemetry.fan_max = maxIgnoringNull(deviceTelemetry.fan_max, roundToOneDecimal(numberOrNull(row.fanSpeedMax)));
+                    // Margin in rpm above the lower critical limit (negative = fan too slow).
+                    if (speedMin !== null && lowCriticalLimit !== null && lowCriticalLimit > 0) {
+                        deviceTelemetry.fan_margin_min = minIgnoringNull(deviceTelemetry.fan_margin_min,
+                            roundToOneDecimal(speedMin - lowCriticalLimit));
+                    }
+                }
+            },
+            {
+                // hw.power_supply.utilization: Fabric Interconnects only (Cisco DevNet).
+                // hw.power_out: chassis, FI and racks.
+                instrument: 'hw.power_supply',
+                dataSource: 'physical',
+                perComponent: true,
+                aggregations: [
+                    { type: 'doubleMax', name: 'utilizationMax', fieldName: 'hw.power_supply.utilization_max' },
+                    { type: 'doubleSum', name: 'outputPowerSum', fieldName: 'hw.power_out' },
+                    { type: 'longSum', name: 'outputPowerCount', fieldName: 'hw.power_out_count' }
+                ],
+                storeRow: function (row, deviceTelemetry, componentName) {
+                    var utilization = roundToOneDecimal(numberOrNull(row.utilizationMax));
+                    var outputPower = divideOrNull(row.outputPowerSum, row.outputPowerCount);
+                    var powerSupply = { name: componentName };
+                    setIfPresent(powerSupply, 'util', utilization);
+                    setIfPresent(powerSupply, 'out_w', roundToOneDecimal(outputPower));
+                    deviceTelemetry.powerSuppliesByName[componentName] = powerSupply;
+                    deviceTelemetry.psu_util_max = maxIgnoringNull(deviceTelemetry.psu_util_max, utilization);
+                    // Total PSU output: power of the device when hw.host.power is not reported
+                    // (IMM chassis). Output power is slightly below the input (wall) power.
+                    if (outputPower !== null) {
+                        deviceTelemetry.psu_output_total_w = (deviceTelemetry.psu_output_total_w || 0) + outputPower;
+                    }
+                }
+            },
+            {
+                // Memory modules (servers and FI). ECC errors are counters: their sum over the
+                // window is the number of new errors during the window.
+                instrument: 'hw.memory',
+                dataSource: 'physical',
+                perComponent: true,
+                aggregations: [
+                    { type: 'doubleSum', name: 'correctableErrors', fieldName: 'hw.errors_correctable_ecc_errors' },
+                    { type: 'doubleSum', name: 'uncorrectableErrors', fieldName: 'hw.errors_uncorrectable_ecc_errors' }
+                ],
+                storeRow: function (row, deviceTelemetry, componentName) {
+                    var correctable = numberOrNull(row.correctableErrors);
+                    var uncorrectable = numberOrNull(row.uncorrectableErrors);
+                    if (correctable === null && uncorrectable === null) { return; }
+                    deviceTelemetry.mem_ecc_correctable = (deviceTelemetry.mem_ecc_correctable || 0) + (correctable || 0);
+                    deviceTelemetry.mem_ecc_uncorrectable = (deviceTelemetry.mem_ecc_uncorrectable || 0) + (uncorrectable || 0);
+                    // Remember which DIMMs had errors, for the operator.
+                    if ((correctable || 0) + (uncorrectable || 0) > 0) {
+                        deviceTelemetry.dimmsWithErrors.push(componentName);
+                    }
+                }
+            },
+            {
+                // Physical processors of a server: C0 utilization (time spent executing).
+                instrument: 'hw.cpu',
+                dataSource: 'physical',
+                perComponent: true,
+                aggregations: [
+                    { type: 'doubleSum', name: 'utilizationSum', fieldName: 'hw.cpu.utilization_c0' },
+                    { type: 'longSum', name: 'utilizationCount', fieldName: 'hw.cpu.utilization_c0_count' },
+                    { type: 'doubleMax', name: 'utilizationMax', fieldName: 'hw.cpu.utilization_c0_max' }
+                ],
+                storeRow: function (row, deviceTelemetry) {
+                    // Device average = all samples of all processors together.
+                    if (numberOrNull(row.utilizationSum) === null || !numberOrNull(row.utilizationCount)) { return; }
+                    deviceTelemetry.cpuUtilizationSum = (deviceTelemetry.cpuUtilizationSum || 0) + row.utilizationSum;
+                    deviceTelemetry.cpuUtilizationCount = (deviceTelemetry.cpuUtilizationCount || 0) + row.utilizationCount;
+                    deviceTelemetry.cpu_util = roundToOneDecimal(deviceTelemetry.cpuUtilizationSum / deviceTelemetry.cpuUtilizationCount);
+                    deviceTelemetry.cpu_util_max = maxIgnoringNull(deviceTelemetry.cpu_util_max,
+                        roundToOneDecimal(numberOrNull(row.utilizationMax)));
+                }
+            },
+            {
+                // System-level CPU (Fabric Interconnects): utilization = 100 - idle.
+                instrument: 'system.cpu',
+                dataSource: 'physical',
+                perComponent: false,
+                aggregations: [
+                    { type: 'doubleSum', name: 'idleSum', fieldName: 'system.cpu.utilization_idle' },
+                    { type: 'longSum', name: 'idleCount', fieldName: 'system.cpu.utilization_idle_count' }
+                ],
+                storeRow: function (row, deviceTelemetry) {
+                    var idle = divideOrNull(row.idleSum, row.idleCount);
+                    // hw.cpu (per processor) takes precedence when both exist.
+                    if (idle !== null && deviceTelemetry.cpu_util === undefined) {
+                        deviceTelemetry.cpu_util = roundToOneDecimal(100 - idle);
+                    }
+                }
+            },
+            {
+                // System-level memory (Fabric Interconnects).
+                instrument: 'system.memory',
+                dataSource: 'physical',
+                perComponent: false,
+                aggregations: [
+                    { type: 'doubleSum', name: 'utilizationSum', fieldName: 'system.memory.utilization' },
+                    { type: 'longSum', name: 'utilizationCount', fieldName: 'system.memory.utilization_count' }
+                ],
+                storeRow: function (row, deviceTelemetry) {
+                    deviceTelemetry.mem_util = roundToOneDecimal(divideOrNull(row.utilizationSum, row.utilizationCount));
+                }
+            },
+            {
+                // Network metrics are in their own dataSource, NetworkInterfaces (Cisco DevNet).
+                instrument: 'hw.network',
+                dataSource: 'network',
+                perComponent: true,
+                aggregations: [
+                    { type: 'doubleSum', name: 'receivedBytes', fieldName: 'hw.network.io_receive' },
+                    { type: 'doubleSum', name: 'receiveDuration', fieldName: 'hw.network.io_receive_duration' },
+                    { type: 'doubleSum', name: 'transmittedBytes', fieldName: 'hw.network.io_transmit' },
+                    { type: 'doubleSum', name: 'transmitDuration', fieldName: 'hw.network.io_transmit_duration' },
+                    { type: 'doubleSum', name: 'receiveErrors', fieldName: 'hw.errors_network_receive_all' },
+                    { type: 'doubleSum', name: 'transmitErrors', fieldName: 'hw.errors_network_transmit_all' },
+                    { type: 'doubleSum', name: 'utilizationSum', fieldName: 'hw.network.bandwidth.utilization_all' },
+                    { type: 'longSum', name: 'utilizationCount', fieldName: 'hw.network.bandwidth.utilization_all_count' },
+                    { type: 'doubleMin', name: 'linkUpMin', fieldName: 'hw.network.up_min' }
+                ],
+                storeRow: function (row, deviceTelemetry, componentName) {
+                    // Throughput = bytes / measurement duration.
+                    var receiveRate = divideOrNull(row.receivedBytes, row.receiveDuration);
+                    var transmitRate = divideOrNull(row.transmittedBytes, row.transmitDuration);
+                    var receiveErrors = numberOrNull(row.receiveErrors), transmitErrors = numberOrNull(row.transmitErrors);
+                    var linkUpMin = numberOrNull(row.linkUpMin);
+                    var port = { name: componentName };
+                    setIfPresent(port, 'rx_bps', roundToOneDecimal(receiveRate));
+                    setIfPresent(port, 'tx_bps', roundToOneDecimal(transmitRate));
+                    setIfPresent(port, 'util', roundToOneDecimal(divideOrNull(row.utilizationSum, row.utilizationCount)));
+                    // Link state over the window: 0 if the link was down at least once.
+                    if (linkUpMin !== null) { port.up = linkUpMin > 0 ? 1 : 0; }
+                    // Errors counted during the telemetry window (receive + transmit).
+                    if (receiveErrors !== null || transmitErrors !== null) {
+                        port.errors = (receiveErrors || 0) + (transmitErrors || 0);
+                        deviceTelemetry.net_errors = (deviceTelemetry.net_errors || 0) + port.errors;
+                    }
+                    deviceTelemetry.portsByName[componentName] = port;
+                    // Device totals = sum of all its ports.
+                    deviceTelemetry.net_rx_bps = roundToOneDecimal((deviceTelemetry.net_rx_bps || 0) + (receiveRate || 0));
+                    deviceTelemetry.net_tx_bps = roundToOneDecimal((deviceTelemetry.net_tx_bps || 0) + (transmitRate || 0));
+                }
+            }
+        ];
+
+        // Key of a device in the telemetry map: "<class>|<name>".
+        function buildTelemetryKey(deviceClass, deviceName) {
+            return deviceClass + '|' + deviceName;
+        }
+
+        // Runs every telemetry query. Returns { "<class>|<name>": deviceTelemetry }.
+        // Rows are grouped by "host.name" and "host.type"; when host.type is missing, the
+        // class is "any" and the lookup falls back to the name only.
+        function collectTelemetryByDeviceKey(timeInterval) {
+            var telemetryByDeviceKey = {};
+
+            function getDeviceTelemetry(row) {
+                var deviceClass = DEVICE_CLASS_BY_HOST_TYPE[row['host.type']] || UNKNOWN_DEVICE_CLASS;
+                var key = buildTelemetryKey(deviceClass, row['host.name']);
+                if (!telemetryByDeviceKey[key]) {
+                    telemetryByDeviceKey[key] = { powerSuppliesByName: {}, portsByName: {}, dimmsWithErrors: [] };
+                }
+                return telemetryByDeviceKey[key];
+            }
+
+            function runOneQuery(query) {
+                var dataSource = (query.dataSource === 'network') ? CONFIG.druidNetworkDataSource : CONFIG.druidPhysicalDataSource;
+                var dimensions = ['host.name', 'host.type'];
+                if (query.perComponent) { dimensions.push(CONFIG.druidComponentDimension); }
+                var rows = runTelemetryGroupBy(dataSource, query.instrument, dimensions, query.aggregations, timeInterval);
+                var rowIndex, row, componentName;
+                for (rowIndex = 0; rowIndex < rows.length; rowIndex++) {
+                    row = rows[rowIndex];
+                    componentName = query.perComponent ? (row[CONFIG.druidComponentDimension] || ('component' + rowIndex)) : null;
+                    query.storeRow(row, getDeviceTelemetry(row), componentName);
+                }
+            }
+
+            var queryIndex;
+            for (queryIndex = 0; queryIndex < TELEMETRY_QUERIES.length; queryIndex++) {
+                (function (query) {
+                    runStepOrRecordError('telemetry ' + query.instrument, function () { runOneQuery(query); });
+                }(TELEMETRY_QUERIES[queryIndex]));
+            }
+            return telemetryByDeviceKey;
+        }
+
+        // =====================================================================================
+        //  7. DEVICE OBJECTS (inventory + telemetry)
+        // =====================================================================================
+
+        // Identifies a chassis inside its UCS domain: "<registered device Moid>:<chassis id>".
+        // Chassis ids restart at 1 in each domain, hence the domain prefix.
+        // Empty string for rack servers (no chassis).
+        function buildChassisKey(inventoryObject) {
+            var domainMoid = (inventoryObject.RegisteredDevice && inventoryObject.RegisteredDevice.Moid) || '';
+            var chassisId = inventoryObject.ChassisId;
+            if (chassisId === undefined || chassisId === null || String(chassisId) === '0') { return ''; }
+            return domainMoid + ':' + chassisId;
+        }
+
+        // Fields shared by servers, chassis and Fabric Interconnects.
+        function buildCommonDeviceFields(deviceClass, inventoryObject, telemetryByDeviceKey) {
+            var device = {
+                moid: inventoryObject.Moid,
+                name: inventoryObject.Name || inventoryObject.Moid,
+                'class': deviceClass,
+                model: inventoryObject.Model || 'unknown'
+            };
+            var alarmSummary = inventoryObject.AlarmSummary || {};
+            var telemetry = telemetryByDeviceKey[buildTelemetryKey(deviceClass, device.name)] ||
+                telemetryByDeviceKey[buildTelemetryKey(UNKNOWN_DEVICE_CLASS, device.name)];
+
+            setIfPresent(device, 'serial', inventoryObject.Serial);
+            setIfPresent(device, 'alarm_critical', numberOrNull(alarmSummary.Critical));
+            setIfPresent(device, 'alarm_warning', numberOrNull(alarmSummary.Warning));
+
+            if (telemetry) {
+                // Power: hw.host.power when reported, otherwise the total PSU output power.
+                if (numberOrNull(telemetry.power_w) !== null) {
+                    device.power_w = telemetry.power_w;
+                    device.power_source = 'host';
+                }
+                else if (numberOrNull(telemetry.psu_output_total_w) !== null) {
+                    device.power_w = roundToOneDecimal(telemetry.psu_output_total_w);
+                    device.power_source = 'psu_output';
+                }
+                setIfPresent(device, 'power_max_w', telemetry.power_max_w);
+                setIfPresent(device, 'temp_max', telemetry.temp_max);
+                setIfPresent(device, 'temp_margin_min', telemetry.temp_margin_min);
+                setIfPresent(device, 'temp_margin_degraded_min', telemetry.temp_margin_degraded_min);
+                setIfPresent(device, 'fan_margin_min', telemetry.fan_margin_min);
+                setIfPresent(device, 'net_errors', telemetry.net_errors);
+                setIfPresent(device, 'mem_ecc_correctable', telemetry.mem_ecc_correctable);
+                setIfPresent(device, 'mem_ecc_uncorrectable', telemetry.mem_ecc_uncorrectable);
+                if (telemetry.mem_ecc_correctable !== undefined || telemetry.mem_ecc_uncorrectable !== undefined) {
+                    device.mem_ecc_dimms = telemetry.dimmsWithErrors.length ? telemetry.dimmsWithErrors.join(', ') : 'none';
+                }
+                setIfPresent(device, 'cpu_util', telemetry.cpu_util);
+                setIfPresent(device, 'cpu_util_max', telemetry.cpu_util_max);
+                setIfPresent(device, 'mem_util', telemetry.mem_util);
+                setIfPresent(device, 'fan_min', telemetry.fan_min);
+                setIfPresent(device, 'fan_max', telemetry.fan_max);
+                setIfPresent(device, 'psu_util_max', telemetry.psu_util_max);
+                setIfPresent(device, 'net_rx_bps', telemetry.net_rx_bps);
+                setIfPresent(device, 'net_tx_bps', telemetry.net_tx_bps);
+            }
+            device.psus = telemetry ? objectValues(telemetry.powerSuppliesByName) : [];
+            device.ports = telemetry ? objectValues(telemetry.portsByName) : [];
+            return device;
+        }
+
+        function buildServerDevice(inventoryObject, telemetryByDeviceKey) {
+            var device = buildCommonDeviceFields('server', inventoryObject, telemetryByDeviceKey);
+            setIfPresent(device, 'firmware', inventoryObject.Firmware);
+            setIfPresent(device, 'mgmt_ip', inventoryObject.MgmtIpAddress);
+            if (inventoryObject.OperPowerState) {
+                device.power_state = (String(inventoryObject.OperPowerState).toLowerCase() === 'on') ? 1 : 0;
+            }
+            device.chassis_key = buildChassisKey(inventoryObject);
+            // Blade = inside a chassis, or a blade model (UCSB-* / UCSX-*).
+            device.is_blade = (device.chassis_key !== '' || /^UCS[BX]/.test(device.model)) ? 1 : 0;
+            return device;
+        }
+
+        function buildChassisDevice(inventoryObject, telemetryByDeviceKey) {
+            var device = buildCommonDeviceFields('chassis', inventoryObject, telemetryByDeviceKey);
+            setIfPresent(device, 'oper_state', inventoryObject.OperState);
+            device.chassis_key = buildChassisKey(inventoryObject);
+            return device;
+        }
+
+        function buildFabricInterconnectDevice(inventoryObject, telemetryByDeviceKey) {
+            var device = buildCommonDeviceFields('fi', inventoryObject, telemetryByDeviceKey);
+            setIfPresent(device, 'firmware', inventoryObject.Version || inventoryObject.Firmware);
+            setIfPresent(device, 'mgmt_ip', inventoryObject.OutOfBandIpAddress || inventoryObject.ManagementIpAddress);
+            return device;
+        }
+
+        function buildDeviceList(inventoryObjects, buildFunction, telemetryByDeviceKey) {
+            var devices = [], index;
+            for (index = 0; inventoryObjects && index < inventoryObjects.length; index++) {
+                devices.push(buildFunction(inventoryObjects[index], telemetryByDeviceKey));
+            }
+            return devices;
+        }
+
+        // Zabbix requires unique visible host names. Duplicated device names get their serial
+        // number (or Moid) appended: "srv-a [WZP123]".
+        function assignUniqueDisplayNames(devices) {
+            var occurrencesByName = {}, index;
+            for (index = 0; index < devices.length; index++) {
+                occurrencesByName[devices[index].name] = (occurrencesByName[devices[index].name] || 0) + 1;
+            }
+            for (index = 0; index < devices.length; index++) {
+                devices[index].display = (occurrencesByName[devices[index].name] > 1)
+                    ? devices[index].name + ' [' + (devices[index].serial || devices[index].moid) + ']'
+                    : devices[index].name;
+            }
+        }
+
+        // Adds to each chassis the list of its blades (used by the Zabbix 7.4 nested discovery).
+        function attachBladesToChassis(chassisDevices, serverDevices) {
+            var chassisIndex, serverIndex, chassis, server;
+            for (chassisIndex = 0; chassisIndex < chassisDevices.length; chassisIndex++) {
+                chassis = chassisDevices[chassisIndex];
+                chassis.blades = [];
+                if (chassis.chassis_key === '') { continue; }
+                for (serverIndex = 0; serverIndex < serverDevices.length; serverIndex++) {
+                    server = serverDevices[serverIndex];
+                    if (server.chassis_key === chassis.chassis_key) {
+                        chassis.blades.push({ moid: server.moid, display: server.display, model: server.model });
+                    }
+                }
+            }
+        }
+
+        // Distinct (class, model) pairs, with the matching host group name, for the
+        // per-model aggregates LLD of the parent template.
+        function listDistinctModels(allDevices) {
+            var models = [], alreadyListed = {}, index, groupName, deviceClassGroup;
+            for (index = 0; index < allDevices.length; index++) {
+                deviceClassGroup = HOST_GROUP_BY_CLASS[allDevices[index]['class']];
+                groupName = 'Intersight/' + deviceClassGroup + '/' + allDevices[index].model;
+                if (!alreadyListed[groupName]) {
+                    alreadyListed[groupName] = true;
+                    models.push({ 'class': deviceClassGroup, model: allDevices[index].model, group: groupName });
+                }
+            }
+            return models;
+        }
+
+        function countAlarmsBySeverity(alarmObjects) {
+            var counts = { critical: 0, warning: 0, info: 0 }, index;
+            for (index = 0; alarmObjects && index < alarmObjects.length; index++) {
+                switch (String(alarmObjects[index].Severity)) {
+                    case 'Critical': counts.critical++; break;
+                    case 'Warning': counts.warning++; break;
+                    default: counts.info++;
+                }
+            }
+            return counts;
+        }
+
+        // =====================================================================================
+        //  8. PUSH TO ZABBIX (history.push, Zabbix 7.0+)
+        // =====================================================================================
+        //  One value per device, sent to the trapper item "intersight.raw" of host
+        //  "intersight-<Moid>". Values for hosts not yet discovered are rejected: this is
+        //  expected during the first run after a new device appears.
+
+        function pushDevicesToZabbix(allDevices, collectionTime) {
+            var pushResult = { enabled: CONFIG.pushEnabled ? 1 : 0, sent: 0, failed: 0 };
+            var historyValues = [], index, zabbixHttp, response, perValueResults;
+            var clockSeconds = Math.floor(collectionTime.getTime() / 1000);
+
+            if (!CONFIG.pushEnabled || allDevices.length === 0) { return pushResult; }
+
+            for (index = 0; index < allDevices.length; index++) {
+                historyValues.push({
+                    host: ZABBIX_HOST_PREFIX + allDevices[index].moid,
+                    key: ZABBIX_RAW_ITEM_KEY,
+                    value: JSON.stringify(allDevices[index]),
+                    clock: clockSeconds
+                });
+            }
+
+            try {
+                zabbixHttp = new HttpRequest();
+                zabbixHttp.addHeader('Content-Type: application/json-rpc');
+                zabbixHttp.addHeader('Authorization: Bearer ' + itemParameters.zbx_token);
+                response = JSON.parse(zabbixHttp.post(itemParameters.zbx_url, JSON.stringify({
+                    jsonrpc: '2.0', method: 'history.push', params: historyValues, id: 1
+                })));
+                if (response.error) { throw response.error.message + ' ' + (response.error.data || ''); }
+
+                // The API answers with one entry per value: {itemid} on success, {error} otherwise.
+                perValueResults = (response.result && response.result.data) || [];
+                for (index = 0; index < perValueResults.length; index++) {
+                    if (perValueResults[index].error) { pushResult.failed++; } else { pushResult.sent++; }
+                }
+            }
+            catch (error) {
+                collectedErrors.push('history.push: ' + error);
+                pushResult.failed = historyValues.length;
+            }
+            return pushResult;
+        }
+
+        // =====================================================================================
+        //  9. MAIN
+        // =====================================================================================
+
+        initializeAuthentication();
+
+        // --- Inventory (each endpoint is independent: one failure does not stop the others)
+        var serverInventory = runStepOrRecordError('servers', function () {
+            return listAllObjects(INTERSIGHT_PATHS.servers);
+        });
+        var chassisInventory = runStepOrRecordError('chassis', function () {
+            return listAllObjects(INTERSIGHT_PATHS.chassis);
+        });
+        var fabricInterconnectInventory = runStepOrRecordError('fabric_interconnects', function () {
+            return listAllObjects(INTERSIGHT_PATHS.fabricInterconnects);
+        });
+        var openAlarms = runStepOrRecordError('alarms', function () {
+            return listAllObjects(INTERSIGHT_PATHS.alarms, OPEN_ALARMS_FILTER, 'Severity');
+        });
+
+        // Nothing at all: fail the item, so that the "no data" trigger fires.
+        if (serverInventory === null && chassisInventory === null && fabricInterconnectInventory === null) {
+            throw 'Intersight inventory unavailable: ' + collectedErrors.join(' | ');
+        }
+
+        // --- Telemetry over the last N minutes, as a Druid ISO-8601 interval "start/end"
+        var collectionTime = new Date();
+        var telemetryInterval = new Date(collectionTime.getTime() - CONFIG.telemetryWindowMinutes * 60000).toISOString() +
+            '/' + collectionTime.toISOString();
+        var telemetryByDeviceKey = collectTelemetryByDeviceKey(telemetryInterval);
+
+        // --- Device objects
+        var serverDevices = buildDeviceList(serverInventory, buildServerDevice, telemetryByDeviceKey);
+        var chassisDevices = buildDeviceList(chassisInventory, buildChassisDevice, telemetryByDeviceKey);
+        var fabricInterconnectDevices = buildDeviceList(fabricInterconnectInventory, buildFabricInterconnectDevice, telemetryByDeviceKey);
+
+        assignUniqueDisplayNames(serverDevices);
+        assignUniqueDisplayNames(chassisDevices);
+        assignUniqueDisplayNames(fabricInterconnectDevices);
+        attachBladesToChassis(chassisDevices, serverDevices);
+
+        var allDevices = serverDevices.concat(chassisDevices, fabricInterconnectDevices);
+
+        // --- Push to the discovered hosts
+        var pushResult = pushDevicesToZabbix(allDevices, collectionTime);
+
+        // --- Servers listed in the parent "servers" LLD (blades excluded in 7.4 nested mode)
+        var serversForDiscovery = [], serverIndex;
+        for (serverIndex = 0; serverIndex < serverDevices.length; serverIndex++) {
+            if (CONFIG.discoverBladesAsServers || serverDevices[serverIndex].is_blade === 0) {
+                serversForDiscovery.push(serverDevices[serverIndex]);
+            }
+        }
+
+        // --- Output for the parent host (LLD rules, health and aggregate items)
+        return JSON.stringify({
+            ts: Math.floor(collectionTime.getTime() / 1000),
+            api: {
+                calls: apiCallCount,
+                errors: collectedErrors,
+                duration_ms: new Date().getTime() - runStartTime,
+                sign_ms: signingTimeMs
+            },
+            counts: {
+                servers: serverDevices.length,
+                chassis: chassisDevices.length,
+                fi: fabricInterconnectDevices.length
+            },
+            alarms: countAlarmsBySeverity(openAlarms),
+            push: pushResult,
+            servers: serversForDiscovery,
+            chassis: chassisDevices,
+            fis: fabricInterconnectDevices,
+            models: listDistinctModels(allDevices)
+        });
+      parameters:
+      - name: auth
+        value: '{$INTERSIGHT.AUTH}'
+      - name: client_id
+        value: '{$INTERSIGHT.CLIENT_ID}'
+      - name: client_secret
+        value: '{$INTERSIGHT.CLIENT_SECRET}'
+      - name: key_id
+        value: '{$INTERSIGHT.KEY_ID}'
+      - name: private_key
+        value: '{$INTERSIGHT.SECRET}'
+      - name: api_host
+        value: '{$INTERSIGHT.API.HOST}'
+      - name: window
+        value: '{$INTERSIGHT.WINDOW}'
+      - name: datasource
+        value: '{$INTERSIGHT.DATASOURCE}'
+      - name: network_datasource
+        value: '{$INTERSIGHT.DATASOURCE.NETWORK}'
+      - name: component_dim
+        value: '{$INTERSIGHT.COMPONENT.DIM}'
+      - name: flat_servers
+        value: '{$INTERSIGHT.FLAT.SERVERS}'
+      - name: zbx_url
+        value: '{$ZABBIX.API.URL}'
+      - name: zbx_token
+        value: '{$ZABBIX.API.TOKEN}'
+      description: Inventory + telemetry from Intersight, pushes per-device JSON to discovered hosts. History disabled on purpose (large JSON); use the item Test button to debug.
+      tags:
+      - tag: component
+        value: raw
+    - uuid: e2ded8d90d594f8992f2ab82ae8af291
+      name: 'API: calls per run'
+      type: DEPENDENT
+      key: intersight.api.calls
+      value_type: UNSIGNED
+      master_item:
+        key: intersight.collect
+      preprocessing:
+      - type: JSONPATH
+        parameters:
+        - $.api.calls
+        error_handler: DISCARD_VALUE
+      tags:
+      - tag: component
+        value: health
+      triggers:
+      - uuid: f2427ced7d334b3d8fb45cf86c214b0a
+        expression: nodata(/Cisco Intersight by API/intersight.api.calls,20m)=1
+        name: 'Intersight: collector has not returned data for 20m'
+        priority: HIGH
+        description: 'The script failed entirely: check key, secret, API host, network egress.'
+    - uuid: e1284010308c4d7692f7a11beb32a16d
+      name: 'API: errors per run'
+      type: DEPENDENT
+      key: intersight.api.errors
+      value_type: UNSIGNED
+      master_item:
+        key: intersight.collect
+      preprocessing:
+      - type: JSONPATH
+        parameters:
+        - $.api.errors.length()
+        error_handler: DISCARD_VALUE
+      tags:
+      - tag: component
+        value: health
+      triggers:
+      - uuid: 86c558dd028f445ba1efe9416a32316d
+        expression: min(/Cisco Intersight by API/intersight.api.errors,#3)>0
+        name: 'Intersight: collector errors for 3 runs'
+        priority: WARNING
+        description: 'See item "API: last errors" for details.'
+    - uuid: 502f713b99774c77860019d1a45dc5c0
+      name: 'API: last errors'
+      type: DEPENDENT
+      key: intersight.api.errors.text
+      value_type: TEXT
+      trends: '0'
+      history: 7d
+      master_item:
+        key: intersight.collect
+      preprocessing:
+      - type: JAVASCRIPT
+        parameters:
+        - 'var e = JSON.parse(value).api.errors; return e.length ? e.join(''\n'') : ''none'';'
+      - type: DISCARD_UNCHANGED_HEARTBEAT
+        parameters:
+        - 1h
+      tags:
+      - tag: component
+        value: health
+    - uuid: b697d26fcdc746bb99f3c71dc1bca81b
+      name: 'API: run duration'
+      type: DEPENDENT
+      key: intersight.api.duration
+      value_type: FLOAT
+      master_item:
+        key: intersight.collect
+      units: ms
+      preprocessing:
+      - type: JSONPATH
+        parameters:
+        - $.api.duration_ms
+        error_handler: DISCARD_VALUE
+      tags:
+      - tag: component
+        value: health
+      triggers:
+      - uuid: 956c1d0fca624504abf2b9c6c12c3a85
+        expression: min(/Cisco Intersight by API/intersight.api.duration,#3)>90000
+        name: 'Intersight: collector close to its 120s timeout'
+        priority: WARNING
+        description: 'Check "API: signing time" (ECDSA in pure JS) and the Intersight API latency.'
+    - uuid: 4d254c193ef142d385098d644018f40d
+      name: 'API: signing time (hs2019)'
+      type: DEPENDENT
+      key: intersight.api.sign
+      value_type: FLOAT
+      master_item:
+        key: intersight.collect
+      units: ms
+      preprocessing:
+      - type: JSONPATH
+        parameters:
+        - $.api.sign_ms
+        error_handler: DISCARD_VALUE
+      tags:
+      - tag: component
+        value: health
+    - uuid: c62a66329c454e9b91965a2e6267583e
+      name: 'Push: values accepted'
+      type: DEPENDENT
+      key: intersight.push.sent
+      value_type: UNSIGNED
+      master_item:
+        key: intersight.collect
+      preprocessing:
+      - type: JSONPATH
+        parameters:
+        - $.push.sent
+        error_handler: DISCARD_VALUE
+      tags:
+      - tag: component
+        value: health
+    - uuid: cf6d8f3515904ab2a63f7d7cb5806928
+      name: 'Push: values rejected'
+      type: DEPENDENT
+      key: intersight.push.failed
+      value_type: UNSIGNED
+      master_item:
+        key: intersight.collect
+      preprocessing:
+      - type: JSONPATH
+        parameters:
+        - $.push.failed
+        error_handler: DISCARD_VALUE
+      tags:
+      - tag: component
+        value: health
+      triggers:
+      - uuid: 2c813c5baeb2400a9dae234c888ed579
+        expression: min(/Cisco Intersight by API/intersight.push.failed,#3)>0
+        name: 'Intersight: history.push rejected values for 3 runs'
+        priority: WARNING
+        description: 'Normal for one run after new devices are discovered. Persistent: check the API token permissions and the Allowed hosts of trapper items.'
+    - uuid: e7283b4c741e4936b962e41171c9476d
+      name: 'Count: servers'
+      type: DEPENDENT
+      key: intersight.count.servers
+      value_type: UNSIGNED
+      master_item:
+        key: intersight.collect
+      preprocessing:
+      - type: JSONPATH
+        parameters:
+        - $.counts.servers
+        error_handler: DISCARD_VALUE
+      tags:
+      - tag: component
+        value: inventory
+    - uuid: c257558d6e594a6b92247f3e82bdf76c
+      name: 'Count: chassis'
+      type: DEPENDENT
+      key: intersight.count.chassis
+      value_type: UNSIGNED
+      master_item:
+        key: intersight.collect
+      preprocessing:
+      - type: JSONPATH
+        parameters:
+        - $.counts.chassis
+        error_handler: DISCARD_VALUE
+      tags:
+      - tag: component
+        value: inventory
+    - uuid: d215a59883db4159baaf15fdfe88f225
+      name: 'Count: fabric interconnects'
+      type: DEPENDENT
+      key: intersight.count.fi
+      value_type: UNSIGNED
+      master_item:
+        key: intersight.collect
+      preprocessing:
+      - type: JSONPATH
+        parameters:
+        - $.counts.fi
+        error_handler: DISCARD_VALUE
+      tags:
+      - tag: component
+        value: inventory
+    - uuid: 33781b0be208487db670659267d3cdd8
+      name: 'Alarms (unacknowledged): critical'
+      type: DEPENDENT
+      key: intersight.alarms.total.critical
+      value_type: UNSIGNED
+      master_item:
+        key: intersight.collect
+      preprocessing:
+      - type: JSONPATH
+        parameters:
+        - $.alarms.critical
+        error_handler: DISCARD_VALUE
+      tags:
+      - tag: component
+        value: alarms
+    - uuid: b34a6d1c2ee14b86bdca8617be9629a4
+      name: 'Alarms (unacknowledged): warning'
+      type: DEPENDENT
+      key: intersight.alarms.total.warning
+      value_type: UNSIGNED
+      master_item:
+        key: intersight.collect
+      preprocessing:
+      - type: JSONPATH
+        parameters:
+        - $.alarms.warning
+        error_handler: DISCARD_VALUE
+      tags:
+      - tag: component
+        value: alarms
+    - uuid: 1d946efcbc2941b99a96f4c22dae1ee9
+      name: 'Alarms (unacknowledged): info'
+      type: DEPENDENT
+      key: intersight.alarms.total.info
+      value_type: UNSIGNED
+      master_item:
+        key: intersight.collect
+      preprocessing:
+      - type: JSONPATH
+        parameters:
+        - $.alarms.info
+        error_handler: DISCARD_VALUE
+      tags:
+      - tag: component
+        value: alarms
+    - uuid: 29671a81119c438fbd06be09ea553855
+      name: 'Servers: total power'
+      type: CALCULATED
+      key: intersight.total.power[Servers]
+      delay: 5m
+      value_type: FLOAT
+      params: sum(last_foreach(/*/intersight.power?[group="Intersight/Servers"]))
+      units: W
+      tags:
+      - tag: component
+        value: aggregate
+    - uuid: 66a5c900e6794dd180535b4ab8ccd73b
+      name: 'Servers: energy last 24h'
+      type: CALCULATED
+      key: intersight.total.energy[Servers]
+      delay: 1h
+      value_type: FLOAT
+      params: sum(last_foreach(/*/intersight.energy.kwh.24h?[group="Intersight/Servers"]))
+      units: kWh
+      tags:
+      - tag: component
+        value: aggregate
+    - uuid: c46716d7a39c4b83b0d653495c5e4569
+      name: 'Servers: cost last 24h'
+      type: CALCULATED
+      key: intersight.total.cost[Servers]
+      delay: 1h
+      value_type: FLOAT
+      params: last(//intersight.total.energy[Servers])*{$INTERSIGHT.ENERGY.PRICE}
+      units: EUR
+      tags:
+      - tag: component
+        value: aggregate
+    - uuid: 1d62e0633c0e4a3598b46ccc0174e0e4
+      name: 'Servers: CO2 last 24h'
+      type: CALCULATED
+      key: intersight.total.co2[Servers]
+      delay: 1h
+      value_type: FLOAT
+      params: last(//intersight.total.energy[Servers])*{$INTERSIGHT.CO2.G.KWH}/1000
+      units: kg
+      tags:
+      - tag: component
+        value: aggregate
+    - uuid: b2217d11d9de44148f5a9aea42082574
+      name: 'Chassis: total power'
+      type: CALCULATED
+      key: intersight.total.power[Chassis]
+      delay: 5m
+      value_type: FLOAT
+      params: sum(last_foreach(/*/intersight.power?[group="Intersight/Chassis"]))
+      units: W
+      tags:
+      - tag: component
+        value: aggregate
+    - uuid: 11d37d62593d4dde99a44f990d078994
+      name: 'Chassis: energy last 24h'
+      type: CALCULATED
+      key: intersight.total.energy[Chassis]
+      delay: 1h
+      value_type: FLOAT
+      params: sum(last_foreach(/*/intersight.energy.kwh.24h?[group="Intersight/Chassis"]))
+      units: kWh
+      tags:
+      - tag: component
+        value: aggregate
+    - uuid: 0be50e4db29c404b8572228984d7bb2d
+      name: 'Chassis: cost last 24h'
+      type: CALCULATED
+      key: intersight.total.cost[Chassis]
+      delay: 1h
+      value_type: FLOAT
+      params: last(//intersight.total.energy[Chassis])*{$INTERSIGHT.ENERGY.PRICE}
+      units: EUR
+      tags:
+      - tag: component
+        value: aggregate
+    - uuid: 099222691e314e91b3e77536b390c80b
+      name: 'Chassis: CO2 last 24h'
+      type: CALCULATED
+      key: intersight.total.co2[Chassis]
+      delay: 1h
+      value_type: FLOAT
+      params: last(//intersight.total.energy[Chassis])*{$INTERSIGHT.CO2.G.KWH}/1000
+      units: kg
+      tags:
+      - tag: component
+        value: aggregate
+    - uuid: 979270d9c00f4a67916ddf7bde416080
+      name: 'FI: total power'
+      type: CALCULATED
+      key: intersight.total.power[FI]
+      delay: 5m
+      value_type: FLOAT
+      params: sum(last_foreach(/*/intersight.power?[group="Intersight/FI"]))
+      units: W
+      tags:
+      - tag: component
+        value: aggregate
+    - uuid: b7540655a4fb447185b50114aafec837
+      name: 'FI: energy last 24h'
+      type: CALCULATED
+      key: intersight.total.energy[FI]
+      delay: 1h
+      value_type: FLOAT
+      params: sum(last_foreach(/*/intersight.energy.kwh.24h?[group="Intersight/FI"]))
+      units: kWh
+      tags:
+      - tag: component
+        value: aggregate
+    - uuid: f84367e56a3148ad93d6178f4a9ec4f1
+      name: 'FI: cost last 24h'
+      type: CALCULATED
+      key: intersight.total.cost[FI]
+      delay: 1h
+      value_type: FLOAT
+      params: last(//intersight.total.energy[FI])*{$INTERSIGHT.ENERGY.PRICE}
+      units: EUR
+      tags:
+      - tag: component
+        value: aggregate
+    - uuid: 4537f1aa919a40b8949c7feff4670798
+      name: 'FI: CO2 last 24h'
+      type: CALCULATED
+      key: intersight.total.co2[FI]
+      delay: 1h
+      value_type: FLOAT
+      params: last(//intersight.total.energy[FI])*{$INTERSIGHT.CO2.G.KWH}/1000
+      units: kg
+      tags:
+      - tag: component
+        value: aggregate
+    discovery_rules:
+    - uuid: a13e9a2dacdc45b59dc100a39ce6bb44
+      name: Servers discovery
+      type: DEPENDENT
+      key: intersight.servers.discovery
+      master_item:
+        key: intersight.collect
+      lifetime: 7d
+      lld_macro_paths:
+      - lld_macro: '{#MOID}'
+        path: $.moid
+      - lld_macro: '{#NAME}'
+        path: $.display
+      - lld_macro: '{#MODEL}'
+        path: $.model
+      preprocessing:
+      - type: JSONPATH
+        parameters:
+        - $.servers
+        error_handler: CUSTOM_VALUE
+        error_handler_params: '[]'
+      host_prototypes:
+      - uuid: fec67a0802624bb49fe2f1d3e17b0f8c
+        host: intersight-{#MOID}
+        name: '{#NAME}'
+        inventory_mode: AUTOMATIC
+        group_links:
+        - group:
+            name: Intersight/Servers
+        group_prototypes:
+        - name: Intersight/Servers/{#MODEL}
+        templates:
+        - name: Cisco Intersight Server by push
+        tags:
+        - tag: intersight.class
+          value: server
+        - tag: intersight.model
+          value: '{#MODEL}'
+    - uuid: 32a48785c23d439ba40838f80d58fd1e
+      name: Chassis discovery
+      type: DEPENDENT
+      key: intersight.chassis.discovery
+      master_item:
+        key: intersight.collect
+      lifetime: 7d
+      lld_macro_paths:
+      - lld_macro: '{#MOID}'
+        path: $.moid
+      - lld_macro: '{#NAME}'
+        path: $.display
+      - lld_macro: '{#MODEL}'
+        path: $.model
+      preprocessing:
+      - type: JSONPATH
+        parameters:
+        - $.chassis
+        error_handler: CUSTOM_VALUE
+        error_handler_params: '[]'
+      host_prototypes:
+      - uuid: 658cc0174ba546e9a44ef9bdf982635c
+        host: intersight-{#MOID}
+        name: '{#NAME}'
+        inventory_mode: AUTOMATIC
+        group_links:
+        - group:
+            name: Intersight/Chassis
+        group_prototypes:
+        - name: Intersight/Chassis/{#MODEL}
+        templates:
+        - name: Cisco Intersight Chassis by push
+        tags:
+        - tag: intersight.class
+          value: chassis
+        - tag: intersight.model
+          value: '{#MODEL}'
+    - uuid: ee0254996a90453eb2113a35505aaac6
+      name: Fabric Interconnects discovery
+      type: DEPENDENT
+      key: intersight.fi.discovery
+      master_item:
+        key: intersight.collect
+      lifetime: 7d
+      lld_macro_paths:
+      - lld_macro: '{#MOID}'
+        path: $.moid
+      - lld_macro: '{#NAME}'
+        path: $.display
+      - lld_macro: '{#MODEL}'
+        path: $.model
+      preprocessing:
+      - type: JSONPATH
+        parameters:
+        - $.fis
+        error_handler: CUSTOM_VALUE
+        error_handler_params: '[]'
+      host_prototypes:
+      - uuid: 750d91bb6ebd4505b1b1b42a7b8fedab
+        host: intersight-{#MOID}
+        name: '{#NAME}'
+        inventory_mode: AUTOMATIC
+        group_links:
+        - group:
+            name: Intersight/FI
+        group_prototypes:
+        - name: Intersight/FI/{#MODEL}
+        templates:
+        - name: Cisco Intersight FI by push
+        tags:
+        - tag: intersight.class
+          value: fi
+        - tag: intersight.model
+          value: '{#MODEL}'
+    - uuid: af2fb7791674486489fc011a4999f733
+      name: Models discovery (aggregates per type)
+      type: DEPENDENT
+      key: intersight.models.discovery
+      master_item:
+        key: intersight.collect
+      lifetime: 7d
+      lld_macro_paths:
+      - lld_macro: '{#CLASS}'
+        path: $.class
+      - lld_macro: '{#MODEL}'
+        path: $.model
+      - lld_macro: '{#GROUP}'
+        path: $.group
+      preprocessing:
+      - type: JSONPATH
+        parameters:
+        - $.models
+        error_handler: CUSTOM_VALUE
+        error_handler_params: '[]'
+      item_prototypes:
+      - uuid: 4a654a9694024f43a72e3ef8622882d6
+        name: '{#CLASS} {#MODEL}: power sum'
+        type: CALCULATED
+        key: intersight.model.power.sum[{#CLASS},{#MODEL}]
+        delay: 5m
+        value_type: FLOAT
+        params: sum(last_foreach(/*/intersight.power?[group="{#GROUP}"]))
+        units: W
+        tags:
+        - tag: component
+          value: aggregate
+        - tag: class
+          value: '{#CLASS}'
+        - tag: model
+          value: '{#MODEL}'
+      - uuid: a4ff36c66ecf42e9a5142ed7aef29fe4
+        name: '{#CLASS} {#MODEL}: power average'
+        type: CALCULATED
+        key: intersight.model.power.avg[{#CLASS},{#MODEL}]
+        delay: 5m
+        value_type: FLOAT
+        params: avg(last_foreach(/*/intersight.power?[group="{#GROUP}"]))
+        units: W
+        tags:
+        - tag: component
+          value: aggregate
+        - tag: class
+          value: '{#CLASS}'
+        - tag: model
+          value: '{#MODEL}'
+      - uuid: be10b95fe5d746258a4dcb6e70b93959
+        name: '{#CLASS} {#MODEL}: power min'
+        type: CALCULATED
+        key: intersight.model.power.min[{#CLASS},{#MODEL}]
+        delay: 5m
+        value_type: FLOAT
+        params: min(last_foreach(/*/intersight.power?[group="{#GROUP}"]))
+        units: W
+        tags:
+        - tag: component
+          value: aggregate
+        - tag: class
+          value: '{#CLASS}'
+        - tag: model
+          value: '{#MODEL}'
+      - uuid: cbba6065e57848149f8b657a18e22842
+        name: '{#CLASS} {#MODEL}: power max'
+        type: CALCULATED
+        key: intersight.model.power.max[{#CLASS},{#MODEL}]
+        delay: 5m
+        value_type: FLOAT
+        params: max(last_foreach(/*/intersight.power?[group="{#GROUP}"]))
+        units: W
+        tags:
+        - tag: component
+          value: aggregate
+        - tag: class
+          value: '{#CLASS}'
+        - tag: model
+          value: '{#MODEL}'
+      - uuid: 9190018d66074570afd42e0137ed4915
+        name: '{#CLASS} {#MODEL}: devices reporting'
+        type: CALCULATED
+        key: intersight.model.count[{#CLASS},{#MODEL}]
+        delay: 5m
+        value_type: FLOAT
+        params: count(last_foreach(/*/intersight.power?[group="{#GROUP}"]))
+        tags:
+        - tag: component
+          value: aggregate
+        - tag: class
+          value: '{#CLASS}'
+        - tag: model
+          value: '{#MODEL}'
+      - uuid: 6243a4c3871d450cb033b92ef9d28dc7
+        name: '{#CLASS} {#MODEL}: energy last 24h'
+        type: CALCULATED
+        key: intersight.model.energy[{#CLASS},{#MODEL}]
+        delay: 1h
+        value_type: FLOAT
+        params: sum(last_foreach(/*/intersight.energy.kwh.24h?[group="{#GROUP}"]))
+        units: kWh
+        tags:
+        - tag: component
+          value: aggregate
+        - tag: class
+          value: '{#CLASS}'
+        - tag: model
+          value: '{#MODEL}'
+      - uuid: eb614f5ba7774e238fb868cce73e9401
+        name: '{#CLASS} {#MODEL}: cost last 24h'
+        type: CALCULATED
+        key: intersight.model.cost[{#CLASS},{#MODEL}]
+        delay: 1h
+        value_type: FLOAT
+        params: last(//intersight.model.energy[{#CLASS},{#MODEL}])*{$INTERSIGHT.ENERGY.PRICE}
+        units: EUR
+        tags:
+        - tag: component
+          value: aggregate
+        - tag: class
+          value: '{#CLASS}'
+        - tag: model
+          value: '{#MODEL}'
+      - uuid: f4966134298b4212a42cad81ce7da6eb
+        name: '{#CLASS} {#MODEL}: CO2 last 24h'
+        type: CALCULATED
+        key: intersight.model.co2[{#CLASS},{#MODEL}]
+        delay: 1h
+        value_type: FLOAT
+        params: last(//intersight.model.energy[{#CLASS},{#MODEL}])*{$INTERSIGHT.CO2.G.KWH}/1000
+        units: kg
+        tags:
+        - tag: component
+          value: aggregate
+        - tag: class
+          value: '{#CLASS}'
+        - tag: model
+          value: '{#MODEL}'
+      - uuid: f9db122c1c714f4eb099aabb8a04d01b
+        name: '{#CLASS} {#MODEL}: hottest sensor'
+        type: CALCULATED
+        key: intersight.model.temp.max[{#CLASS},{#MODEL}]
+        delay: 5m
+        value_type: FLOAT
+        params: max(last_foreach(/*/intersight.temp.max?[group="{#GROUP}"]))
+        units: °C
+        tags:
+        - tag: component
+          value: aggregate
+        - tag: class
+          value: '{#CLASS}'
+        - tag: model
+          value: '{#MODEL}'
+    tags:
+    - tag: class
+      value: hardware
+    - tag: target
+      value: cisco-intersight
+    macros:
+    - macro: '{$INTERSIGHT.API.HOST}'
+      value: intersight.com
+      description: Intersight FQDN (SaaS region or appliance).
+    - macro: '{$INTERSIGHT.AUTH}'
+      value: hs2019
+      description: hs2019 = API key v3 (EC P-256, ECDSA in pure JS). rsa = API key v2. oauth = OAuth2 client credentials.
+    - macro: '{$INTERSIGHT.CLIENT_ID}'
+      value: ''
+      description: OAuth2 client ID (app registration with client_credentials grant).
+    - macro: '{$INTERSIGHT.CLIENT_SECRET}'
+      description: OAuth2 client secret.
+      type: SECRET_TEXT
+    - macro: '{$INTERSIGHT.KEY_ID}'
+      value: ''
+      description: API key ID (hs2019 or rsa).
+    - macro: '{$INTERSIGHT.SECRET}'
+      description: 'Private key (EC for hs2019, RSA for rsa): full PEM with literal \n, or base64 body on one line.'
+      type: SECRET_TEXT
+    - macro: '{$INTERSIGHT.WINDOW}'
+      value: '15'
+      description: Telemetry window in minutes.
+    - macro: '{$INTERSIGHT.DATASOURCE}'
+      value: PhysicalEntities
+      description: Druid dataSource of hw.host, hw.temperature, hw.fan, hw.power_supply (Cisco doc).
+    - macro: '{$INTERSIGHT.DATASOURCE.NETWORK}'
+      value: NetworkInterfaces
+      description: Druid dataSource of hw.network (Cisco doc).
+    - macro: '{$INTERSIGHT.COMPONENT.DIM}'
+      value: name
+      description: 'Druid attribute naming a PSU / sensor / port (Cisco doc: name).'
+    - macro: '{$INTERSIGHT.FLAT.SERVERS}'
+      value: '1'
+      description: 1 = all servers discovered here. 0 = blades discovered under their chassis (Zabbix 7.4 nested).
+    - macro: '{$ZABBIX.API.URL}'
+      value: https://zabbix.example.com/api_jsonrpc.php
+      description: Zabbix API URL used by history.push.
+    - macro: '{$ZABBIX.API.TOKEN}'
+      description: API token of a dedicated user with read access to Intersight/* groups.
+      type: SECRET_TEXT
+    - macro: '{$INTERSIGHT.ENERGY.PRICE}'
+      value: '0'
+      description: Electricity price per kWh. To fill in.
+    - macro: '{$INTERSIGHT.CO2.G.KWH}'
+      value: '0'
+      description: Grid carbon intensity in gCO2/kWh. To fill in.

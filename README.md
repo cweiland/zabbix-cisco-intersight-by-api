@@ -13,6 +13,7 @@ Supervision de Cisco Intersight (SaaS ou Virtual Appliance) dans Zabbix 7.0 LTS,
 | `templates/zbx_intersight_templates_7.0.yaml` | Les 4 templates, **à importer dans Zabbix** |
 | `src/collector.js` | Script de collecte (ES5 / Duktape), embarqué dans le template |
 | `tools/generate_templates.py` | Régénère le YAML depuis `src/collector.js` |
+| `tools/validate_template.py` | Contrôles structurels du YAML généré (macros, UUID, clés, triggers) |
 | `tools/check_metrics_against_doc.py` | Vérifie les métriques utilisées contre la doc « Supported Metrics » de ton appliance |
 | `tests/` | Tests Node.js sans dépendance : ECDSA (vecteur RFC 6979 + OpenSSL), modes d'auth, scénarios |
 | `docs/UPGRADE_7.4_FR.md` | Variante Zabbix 7.4 (blades découverts sous leur châssis) |
