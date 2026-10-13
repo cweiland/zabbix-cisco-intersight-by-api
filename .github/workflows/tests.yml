@@ -32,3 +32,6 @@ jobs:
           pip install pyyaml==6.0.3
           python3 tools/generate_templates.py
           git diff --exit-code templates/
+
+      - name: Template structure (macros, UUIDs, keys, triggers, value maps)
+        run: python3 tools/validate_template.py
