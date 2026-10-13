@@ -1,0 +1,13 @@
+# Never commit credentials
+*.pem
+*.key
+.env
+
+# Cisco documentation (not redistributable): keep it local
+Supported_Metrices.md
+
+# Editors / OS
+.vscode/
+.idea/
+.DS_Store
+__pycache__/
