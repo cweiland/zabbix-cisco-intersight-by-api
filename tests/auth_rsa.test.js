@@ -36,7 +36,7 @@ HttpRequest.prototype.post=function(url,body){
   if(ins==='hw.power_supply')return R([{event:{'host.name':'srv-a',name:'PSU1',u_max:41.5,o_sum:1500,o_cnt:10}},{event:{'host.name':'srv-a',name:'PSU2',u_max:38}}]);
   if(ins==='hw.network'){this.st=400;return 'bad dimension';}
   return R([]);};
-const code=fs.readFileSync(require('path').join(__dirname, '..', 'src', 'collector.js'),'utf8');
+const code=fs.readFileSync(process.env.COLLECTOR_CODE_FILE || require('path').join(__dirname, '..', 'src', 'collector.js'),'utf8');
 const fn=new Function('value',code);
 const out=JSON.parse(fn(JSON.stringify({auth:'rsa',key_id:'KID',private_key:oneLine,api_host:'intersight.com',window:'15',flat_servers:'0',zbx_url:'https://z/zabbix/api_jsonrpc.php',zbx_token:'tok'})));
 console.log((lastSigOk.length && lastSigOk.every(Boolean)?'PASS ':'FAIL ')+'RSA (api key v2) signatures verified: '+lastSigOk.length);if(!(lastSigOk.length&&lastSigOk.every(Boolean)))process.exitCode=1;

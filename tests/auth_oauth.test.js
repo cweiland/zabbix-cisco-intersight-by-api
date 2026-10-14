@@ -1,5 +1,5 @@
 // OAuth2 client credentials mode
-const fs=require('fs');const code=fs.readFileSync(require('path').join(__dirname, '..', 'src', 'collector.js'),'utf8');
+const fs=require('fs');const code=fs.readFileSync(process.env.COLLECTOR_CODE_FILE || require('path').join(__dirname, '..', 'src', 'collector.js'),'utf8');
 let tokReq=null, bearerOK=true;
 global.sha256=()=>{throw 'no crypto in oauth'};global.sign=()=>{throw 'no sign in oauth'};
 global.HttpRequest=function(){this.h=[];this.st=200;};
