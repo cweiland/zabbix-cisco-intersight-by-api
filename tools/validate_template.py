@@ -5,7 +5,8 @@ Exit code 1 on the first category of problems found.
 
 Checks: macro names are valid {$...}, every macro used is defined in the same
 template, UUIDs are unique UUIDv4, item keys are unique per template, triggers
-only reference items of their own template, value maps used are defined.
+only reference items of their own template, value maps used are defined, scripts
+(Script items, JavaScript preprocessing) fit the Zabbix limit of 65535 characters.
 """
 import os
 import re
@@ -17,6 +18,7 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 TEMPLATE = os.path.join(ROOT, 'templates', 'zbx_intersight_templates_7.0.yaml')
 MACRO_NAME = re.compile(r'\{\$[A-Z0-9_.]+\}')
 UUID_V4 = re.compile(r'[0-9a-f]{12}4[0-9a-f]{3}[89ab][0-9a-f]{15}')
+ZABBIX_MAX_SCRIPT_LENGTH = 65535
 
 
 def walk_uuids(node, found):
@@ -64,6 +66,15 @@ def main():
                 for key in re.findall(own_items + r'([^,)]+)', trigger['expression']):
                     if key not in prototype_keys:
                         problems.append('%s: trigger prototype %r references %s' % (name, trigger['name'], key))
+
+        # Zabbix rejects longer scripts at import: 'Invalid parameter "/N/params": value is too long'.
+        for item in template['items']:
+            scripts = [item['params']] if item['type'] == 'SCRIPT' else []
+            scripts += [step['parameters'][0] for step in item.get('preprocessing', []) if step['type'] == 'JAVASCRIPT']
+            for script in scripts:
+                if len(script) > ZABBIX_MAX_SCRIPT_LENGTH or len(script.encode('utf-8')) > ZABBIX_MAX_SCRIPT_LENGTH:
+                    problems.append('%s: script of item %s is %d characters (Zabbix limit %d)'
+                                    % (name, item['key'], len(script), ZABBIX_MAX_SCRIPT_LENGTH))
 
         valuemaps = {v['name'] for v in template.get('valuemaps', [])}
         all_items = template['items'] + [p for r in template.get('discovery_rules', []) for p in r.get('item_prototypes', [])]
