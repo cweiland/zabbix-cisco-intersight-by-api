@@ -2,6 +2,11 @@
 
 Usage: python3 tools/generate_templates.py   (requires PyYAML)
 UUIDs are derived from names, so regenerating gives stable UUIDs.
+
+Zabbix rejects item scripts longer than 65535 characters (import error
+'Invalid parameter "/N/params": value is too long'). The template therefore embeds a
+copy of src/collector.js without its comments: see strip_comments(). The commented
+file stays the source of truth.
 """
 import hashlib, os, yaml
 
@@ -12,6 +17,36 @@ TSRV = 'Cisco Intersight Server by push'
 TCHA = 'Cisco Intersight Chassis by push'
 TFI = 'Cisco Intersight FI by push'
 TGROUP = 'Templates/Cisco Intersight'
+ZABBIX_MAX_SCRIPT_LENGTH = 65535
+EMBEDDED_SCRIPT_HEADER = (
+    '// Generated from src/collector.js by tools/generate_templates.py: comments stripped\n'
+    '// to fit the 65535-character limit of Zabbix scripts. Edit the source, not this copy.\n'
+)
+
+
+def strip_comments(script):
+    """Removes the leading /* ... */ header block and every full-line // comment.
+
+    Only whole comment lines are removed: code lines are never modified, so a "//"
+    inside a string (e.g. 'https://') cannot be damaged. Consecutive blank lines are
+    collapsed into one.
+    """
+    if script.startswith('/*'):
+        script = script[script.index('*/') + 2:].lstrip('\n')
+    kept_lines, previous_blank = [], False
+    for line in script.split('\n'):
+        if line.strip().startswith('//'):
+            continue
+        blank = line.strip() == ''
+        if blank and previous_blank:
+            continue
+        kept_lines.append(line.rstrip())
+        previous_blank = blank
+    stripped = EMBEDDED_SCRIPT_HEADER + '\n'.join(kept_lines).strip('\n') + '\n'
+    if len(stripped) > ZABBIX_MAX_SCRIPT_LENGTH:
+        raise SystemExit('Embedded script is %d characters, above the Zabbix limit of %d'
+                         % (len(stripped), ZABBIX_MAX_SCRIPT_LENGTH))
+    return stripped
 
 
 def uid(*parts):
@@ -113,36 +148,16 @@ def child(tpl, cls, label, extra_items):
         dep(T, 'intersight.raw', 'Power: peak', 'intersight.power.max', '$.power_max_w', units='W', tags=tag('power')),
         dep(T, 'intersight.raw', 'Temperature: hottest sensor', 'intersight.temp.max', '$.temp_max', units='°C',
             tags=tag('thermal')),
-        dep(T, 'intersight.raw', 'Temperature: smallest margin to critical', 'intersight.temp.margin',
-            '$.temp_margin_min', units='°C', tags=tag('thermal'),
-            triggers=[trig(T, 'tm', 'max(/$T/intersight.temp.margin,15m)<{$INTERSIGHT.TEMP.MARGIN.WARN}',
-                           'Intersight: a sensor is within {$INTERSIGHT.TEMP.MARGIN.WARN}°C of its critical threshold',
-                           'HIGH', 'Margin = hw.temperature.limit_high_critical - hw.temperature, per sensor. '
-                           'Each sensor is compared with its own threshold.')]),
-        dep(T, 'intersight.raw', 'Temperature: smallest margin to non-critical threshold',
-            'intersight.temp.margin.degraded', '$.temp_margin_degraded_min', units='°C', tags=tag('thermal'),
-            triggers=[trig(T, 'tdeg', 'max(/$T/intersight.temp.margin.degraded,15m)<0',
-                           'Intersight: a sensor is above its non-critical temperature threshold', 'WARNING',
-                           'hw.temperature above hw.temperature.limit_high_degraded for 15m, on at least one sensor.')]),
-        dep(T, 'intersight.raw', 'Fans: lowest speed', 'intersight.fan.min', '$.fan_min', units='rpm',
+        dep(T, 'intersight.raw', 'Fans: lowest speed', 'intersight.fan.min', '$.fan_min', units='!rpm',
             tags=tag('fans')),
-        dep(T, 'intersight.raw', 'Fans: smallest margin to lower critical speed', 'intersight.fan.margin',
-            '$.fan_margin_min', units='rpm', tags=tag('fans'),
-            triggers=[trig(T, 'fan', 'max(/$T/intersight.fan.margin,15m)<0',
-                           'Intersight: a fan is below its lower critical speed', 'AVERAGE',
-                           'hw.fan.speed below hw.fan.speed.limit_low_critical for 15m, on at least one fan.')]),
-        dep(T, 'intersight.raw', 'Fans: highest speed', 'intersight.fan.max', '$.fan_max', units='rpm',
+        dep(T, 'intersight.raw', 'Fans: highest speed', 'intersight.fan.max', '$.fan_max', units='!rpm',
             tags=tag('fans')),
         dep(T, 'intersight.raw', 'PSU: highest utilization', 'intersight.psu.util.max', '$.psu_util_max', units='%',
             tags=tag('psu')),
         dep(T, 'intersight.raw', 'Network: errors in window', 'intersight.net.errors', '$.net_errors',
             tags=tag('network')),
-        dep(T, 'intersight.raw', 'Network: received', 'intersight.net.rx', '$.net_rx_bps', units='Bps',
-            tags=tag('network')),
-        dep(T, 'intersight.raw', 'Network: transmitted', 'intersight.net.tx', '$.net_tx_bps', units='Bps',
-            tags=tag('network')),
         calc(T, 'Energy: last 24h', 'intersight.energy.kwh.24h',
-             'avg(//intersight.power,24h)*24/1000', 'kWh', '1h', tags=tag('energy')),
+             'avg(//intersight.power,24h)*24/1000', '!kWh', '1h', tags=tag('energy')),
     ]
     items += extra_items(T, tag)
     for it in items:
@@ -161,10 +176,14 @@ def child(tpl, cls, label, extra_items):
             dep(T, 'intersight.raw', 'PSU {#PSU}: output power', 'intersight.psu.out[{#PSU}]',
                 "$.psus[?(@.name=='{#PSU}')].out_w.first()", units='W',
                 tags=[{'tag': 'component', 'value': 'psu'}, {'tag': 'psu', 'value': '{#PSU}'}]),
+            dep(T, 'intersight.raw', 'PSU {#PSU}: input power', 'intersight.psu.in[{#PSU}]',
+                "$.psus[?(@.name=='{#PSU}')].in_w.first()", units='W',
+                tags=[{'tag': 'component', 'value': 'psu'}, {'tag': 'psu', 'value': '{#PSU}'}]),
         ],
     }
     lld_psu['item_prototypes'][0]['uuid'] = uid(T, 'psu.util.proto')
     lld_psu['item_prototypes'][1]['uuid'] = uid(T, 'psu.out.proto')
+    lld_psu['item_prototypes'][2]['uuid'] = uid(T, 'psu.in.proto')
     lld_psu['trigger_prototypes'] = [trig(
         T, 'psu', 'min(/$T/intersight.psu.util[{#PSU}],15m)>{$INTERSIGHT.PSU.UTIL.WARN}',
         'Intersight: PSU {#PSU} above {$INTERSIGHT.PSU.UTIL.WARN}% for 15m', 'WARNING',
@@ -176,17 +195,26 @@ def child(tpl, cls, label, extra_items):
         'filter': {'evaltype': 'AND', 'conditions': [
             {'macro': '{#PORT}', 'value': '{$INTERSIGHT.PORT.MATCHES}', 'formulaid': 'A'},
             {'macro': '{#PORT}', 'value': '{$INTERSIGHT.PORT.NOT_MATCHES}', 'operator': 'NOT_MATCHES_REGEX',
-             'formulaid': 'B'}]},
-        'lld_macro_paths': [{'lld_macro': '{#PORT}', 'path': '$.name'}],
+             'formulaid': 'B'},
+            {'macro': '{#PORT_ROLE}', 'value': '{$INTERSIGHT.PORT.ROLE.NOT_MATCHES}', 'operator': 'NOT_MATCHES_REGEX',
+             'formulaid': 'C'}]},
+        'lld_macro_paths': [{'lld_macro': '{#PORT}', 'path': '$.name'},
+                            {'lld_macro': '{#PORT_ROLE}', 'path': '$.role'}],
         'preprocessing': [{'type': 'JSONPATH', 'parameters': ['$.ports'],
                            'error_handler': 'CUSTOM_VALUE', 'error_handler_params': '[]'}],
         'item_prototypes': [
             dep(T, 'intersight.raw', 'Port {#PORT}: received', 'intersight.port.rx[{#PORT}]',
-                "$.ports[?(@.name=='{#PORT}')].rx_bps.first()", units='Bps',
-                tags=[{'tag': 'component', 'value': 'network'}, {'tag': 'port', 'value': '{#PORT}'}]),
+                "$.ports[?(@.name=='{#PORT}')].rx_bps.first()", units='bps',
+                tags=[{'tag': 'component', 'value': 'network'}, {'tag': 'port', 'value': '{#PORT}'},
+                      {'tag': 'port_role', 'value': '{#PORT_ROLE}'}]),
             dep(T, 'intersight.raw', 'Port {#PORT}: transmitted', 'intersight.port.tx[{#PORT}]',
-                "$.ports[?(@.name=='{#PORT}')].tx_bps.first()", units='Bps',
-                tags=[{'tag': 'component', 'value': 'network'}, {'tag': 'port', 'value': '{#PORT}'}]),
+                "$.ports[?(@.name=='{#PORT}')].tx_bps.first()", units='bps',
+                tags=[{'tag': 'component', 'value': 'network'}, {'tag': 'port', 'value': '{#PORT}'},
+                      {'tag': 'port_role', 'value': '{#PORT_ROLE}'}]),
+            dep(T, 'intersight.raw', 'Port {#PORT}: link speed', 'intersight.port.speed[{#PORT}]',
+                "$.ports[?(@.name=='{#PORT}')].speed_bps.first()", units='bps',
+                tags=[{'tag': 'component', 'value': 'network'}, {'tag': 'port', 'value': '{#PORT}'},
+                      {'tag': 'port_role', 'value': '{#PORT_ROLE}'}]),
             dep(T, 'intersight.raw', 'Port {#PORT}: errors in window', 'intersight.port.errors[{#PORT}]',
                 "$.ports[?(@.name=='{#PORT}')].errors.first()",
                 tags=[{'tag': 'component', 'value': 'network'}, {'tag': 'port', 'value': '{#PORT}'}]),
@@ -210,15 +238,16 @@ def child(tpl, cls, label, extra_items):
     }
     lld_port['item_prototypes'][0]['uuid'] = uid(T, 'port.rx.proto')
     lld_port['item_prototypes'][1]['uuid'] = uid(T, 'port.tx.proto')
-    lld_port['item_prototypes'][2]['uuid'] = uid(T, 'port.err.proto')
-    lld_port['item_prototypes'][3]['uuid'] = uid(T, 'port.util.proto')
-    lld_port['item_prototypes'][4]['uuid'] = uid(T, 'port.up.proto')
+    lld_port['item_prototypes'][2]['uuid'] = uid(T, 'port.speed.proto')
+    lld_port['item_prototypes'][3]['uuid'] = uid(T, 'port.err.proto')
+    lld_port['item_prototypes'][4]['uuid'] = uid(T, 'port.util.proto')
+    lld_port['item_prototypes'][5]['uuid'] = uid(T, 'port.up.proto')
 
     return {
         'uuid': uid(T), 'template': T, 'name': T,
         'description': 'Linked by host prototypes of "' + PARENT + '". Receives data via history.push; '
                        'makes no API call itself. Class: ' + label + '.',
-        'vendor': {'name': 'Custom', 'version': '7.0-5'},
+        'vendor': {'name': 'Custom', 'version': '7.0-6'},
         'groups': [{'name': TGROUP}],
         'items': items,
         'discovery_rules': [lld_psu, lld_port],
@@ -234,6 +263,9 @@ def child(tpl, cls, label, extra_items):
             macro('{$INTERSIGHT.PSU.UTIL.WARN}', '80', 'PSU utilization threshold (%). Reported by Fabric Interconnects only.'),
             macro('{$INTERSIGHT.PORT.MATCHES}', '.*', 'Regex of ports to discover.'),
             macro('{$INTERSIGHT.PORT.NOT_MATCHES}', 'CHANGE_IF_NEEDED', 'Regex of ports to ignore.'),
+            macro('{$INTERSIGHT.PORT.ROLE.NOT_MATCHES}', '^(unconfigured|vethernet|vfc|vnic|vhba)$',
+                  'Regex of port roles (hw.network.port.role) to ignore. Default: unconfigured and virtual '
+                  'interfaces, as excluded by the intersight-grafana dashboards.'),
         ],
         'valuemaps': [{'uuid': uid(T, 'vm'), 'name': 'Power state',
                        'mappings': [{'value': '0', 'newvalue': 'Off'}, {'value': '1', 'newvalue': 'On'}]},
@@ -259,19 +291,50 @@ def ecc_items(T, tag):
     ]
 
 
-def cpu_items(T, tag, with_max):
+def cpu_items(T, tag, with_peak):
     items = [dep(T, 'intersight.raw', 'CPU: utilization', 'intersight.cpu.util', '$.cpu_util', units='%',
                  tags=tag('cpu'),
                  triggers=[trig(T, 'cpu', 'min(/$T/intersight.cpu.util,30m)>{$INTERSIGHT.CPU.UTIL.WARN}',
                                 'Intersight: CPU utilization above {$INTERSIGHT.CPU.UTIL.WARN}% for 30m', 'WARNING')])]
-    if with_max:
-        items.append(dep(T, 'intersight.raw', 'CPU: busiest processor (peak)', 'intersight.cpu.util.max',
+    if with_peak:
+        items.append(dep(T, 'intersight.raw', 'CPU: peak utilization in window', 'intersight.cpu.util.max',
                          '$.cpu_util_max', units='%', tags=tag('cpu')))
     return items
 
 
+def temperature_margin_items(T, tag, with_degraded):
+    # Cisco "Supported Metrics", hw-temperature: limit_high_critical is reported by FI,
+    # imm-blade-mqtt and imm-ism-rack-mqtt; limit_high_degraded by the two latter only.
+    items = [dep(T, 'intersight.raw', 'Temperature: smallest margin to critical', 'intersight.temp.margin',
+                 '$.temp_margin_min', units='°C', tags=tag('thermal'),
+                 triggers=[trig(T, 'tm', 'max(/$T/intersight.temp.margin,15m)<{$INTERSIGHT.TEMP.MARGIN.WARN}',
+                                'Intersight: a sensor is within {$INTERSIGHT.TEMP.MARGIN.WARN}°C of its critical threshold',
+                                'HIGH', 'Margin = hw.temperature.limit_high_critical - hw.temperature, per sensor.')])]
+    if with_degraded:
+        items.append(dep(T, 'intersight.raw', 'Temperature: smallest margin to non-critical threshold',
+                         'intersight.temp.margin.degraded', '$.temp_margin_degraded_min', units='°C',
+                         tags=tag('thermal'),
+                         triggers=[trig(T, 'tdeg', 'max(/$T/intersight.temp.margin.degraded,15m)<0',
+                                        'Intersight: a sensor is above its non-critical temperature threshold',
+                                        'WARNING', 'hw.temperature above hw.temperature.limit_high_degraded '
+                                        '(upper non critical limit) for 15m, on at least one sensor.')]))
+    return items
+
+
+def fan_margin_items(T, tag):
+    # Cisco "Supported Metrics", hw-fan: limit_low_critical is reported by
+    # imm-chassis-mqtt-primary/secondary and imm-ism-rack-mqtt.
+    return [dep(T, 'intersight.raw', 'Fans: smallest margin to lower critical speed', 'intersight.fan.margin',
+                '$.fan_margin_min', units='!rpm', tags=tag('fans'),
+                triggers=[trig(T, 'fan', 'max(/$T/intersight.fan.margin,15m)<0',
+                               'Intersight: a fan is below its lower critical speed', 'AVERAGE',
+                               'hw.fan.speed below hw.fan.speed.limit_low_critical for 15m, on at least one fan.')])]
+
+
 def server_extra(T, tag):
-    return ecc_items(T, tag) + cpu_items(T, tag, True) + [
+    # ECC: blades and racks. CPU: hw.cpu (imm-blade-mqtt, imm-ism-rack-mqtt).
+    return (ecc_items(T, tag) + cpu_items(T, tag, True) + temperature_margin_items(T, tag, True)
+            + fan_margin_items(T, tag)) + [
         dep(T, 'intersight.raw', 'Firmware (CIMC)', 'intersight.firmware', '$.firmware', 'CHAR',
             tags=tag('inventory'), hb='1d', inv='SOFTWARE', history='30d',
             triggers=[trig(T, 'fw', 'change(/$T/intersight.firmware)=1',
@@ -286,12 +349,13 @@ def server_extra(T, tag):
 
 
 def chassis_extra(T, tag):
-    return [dep(T, 'intersight.raw', 'Operational state', 'intersight.oper.state', '$.oper_state', 'CHAR',
+    return fan_margin_items(T, tag) + [dep(T, 'intersight.raw', 'Operational state', 'intersight.oper.state', '$.oper_state', 'CHAR',
                 tags=tag('health'), hb='1d', history='7d')]
 
 
 def fi_extra(T, tag):
-    return ecc_items(T, tag) + cpu_items(T, tag, False) + [
+    # system.cpu and system.memory: Fabric Interconnects (and imm-edge-cmc).
+    return cpu_items(T, tag, False) + temperature_margin_items(T, tag, False) + [
         dep(T, 'intersight.raw', 'Memory: utilization', 'intersight.mem.util', '$.mem_util', units='%',
             tags=tag('memory'),
             triggers=[trig(T, 'mem', 'min(/$T/intersight.mem.util,30m)>{$INTERSIGHT.MEM.UTIL.WARN}',
@@ -315,7 +379,8 @@ def parent(script):
               ('api_host', '{$INTERSIGHT.API.HOST}'), ('window', '{$INTERSIGHT.WINDOW}'),
               ('datasource', '{$INTERSIGHT.DATASOURCE}'),
               ('network_datasource', '{$INTERSIGHT.DATASOURCE.NETWORK}'), ('component_dim', '{$INTERSIGHT.COMPONENT.DIM}'),
-              ('flat_servers', '{$INTERSIGHT.FLAT.SERVERS}'), ('zbx_url', '{$ZABBIX.API.URL}'),
+              ('flat_servers', '{$INTERSIGHT.FLAT.SERVERS}'),
+              ('percent_scale', '{$INTERSIGHT.PERCENT.SCALE}'), ('zbx_url', '{$ZABBIX.API.URL}'),
               ('zbx_token', '{$ZABBIX.API.TOKEN}')]
     items = [{
         'uuid': uid(T, M), 'name': 'Intersight collector', 'type': 'SCRIPT', 'key': M, 'delay': '5m',
@@ -342,12 +407,12 @@ def parent(script):
              "var e = JSON.parse(value).api.errors; return e.length ? e.join('\\n') : 'none';"]},
              {'type': 'DISCARD_UNCHANGED_HEARTBEAT', 'parameters': ['1h']}],
          'tags': tag('health')},
-        dep(T, M, 'API: run duration', 'intersight.api.duration', '$.api.duration_ms', units='ms',
+        dep(T, M, 'API: run duration', 'intersight.api.duration', '$.api.duration_ms', units='!ms',
             tags=tag('health'),
             triggers=[trig(T, 'slow', 'min(/$T/intersight.api.duration,#3)>90000',
                            'Intersight: collector close to its 120s timeout', 'WARNING',
                            'Check "API: signing time" (ECDSA in pure JS) and the Intersight API latency.')]),
-        dep(T, M, 'API: signing time (hs2019)', 'intersight.api.sign', '$.api.sign_ms', units='ms',
+        dep(T, M, 'API: signing time (hs2019)', 'intersight.api.sign', '$.api.sign_ms', units='!ms',
             tags=tag('health')),
         dep(T, M, 'Push: values accepted', 'intersight.push.sent', '$.push.sent', 'UNSIGNED', tags=tag('health')),
         dep(T, M, 'Push: values rejected', 'intersight.push.failed', '$.push.failed', 'UNSIGNED',
@@ -375,13 +440,13 @@ def parent(script):
             calc(T, cls + ': total power', k % 'power',
                  'sum(last_foreach(/*/intersight.power?[group="%s"]))' % g, 'W', tags=tag('aggregate')),
             calc(T, cls + ': energy last 24h', k % 'energy',
-                 'sum(last_foreach(/*/intersight.energy.kwh.24h?[group="%s"]))' % g, 'kWh', '1h',
+                 'sum(last_foreach(/*/intersight.energy.kwh.24h?[group="%s"]))' % g, '!kWh', '1h',
                  tags=tag('aggregate')),
             calc(T, cls + ': cost last 24h', k % 'cost',
-                 'last(//%s)*{$INTERSIGHT.ENERGY.PRICE}' % (k % 'energy'), 'EUR', '1h',
+                 'last(//%s)*{$INTERSIGHT.ENERGY.PRICE}' % (k % 'energy'), '!EUR', '1h',
                  tags=tag('aggregate')),
             calc(T, cls + ': CO2 last 24h', k % 'co2',
-                 'last(//%s)*{$INTERSIGHT.CO2.G.KWH}/1000' % (k % 'energy'), 'kg', '1h', tags=tag('aggregate')),
+                 'last(//%s)*{$INTERSIGHT.CO2.G.KWH}/1000' % (k % 'energy'), '!kg', '1h', tags=tag('aggregate')),
         ]
 
     def lldrule(key, name, path, cls_group, tpl, cls):
@@ -418,11 +483,11 @@ def parent(script):
         calc(T, '{#CLASS} {#MODEL}: power max', mk('power.max'), 'max(last_foreach(%s))' % pw, 'W'),
         calc(T, '{#CLASS} {#MODEL}: devices reporting', mk('count'), 'count(last_foreach(%s))' % pw),
         calc(T, '{#CLASS} {#MODEL}: energy last 24h', mk('energy'),
-             'sum(last_foreach(/*/intersight.energy.kwh.24h?[group="%s"]))' % G, 'kWh', '1h'),
+             'sum(last_foreach(/*/intersight.energy.kwh.24h?[group="%s"]))' % G, '!kWh', '1h'),
         calc(T, '{#CLASS} {#MODEL}: cost last 24h', mk('cost'),
-             'last(//%s)*{$INTERSIGHT.ENERGY.PRICE}' % mk('energy'), 'EUR', '1h'),
+             'last(//%s)*{$INTERSIGHT.ENERGY.PRICE}' % mk('energy'), '!EUR', '1h'),
         calc(T, '{#CLASS} {#MODEL}: CO2 last 24h', mk('co2'),
-             'last(//%s)*{$INTERSIGHT.CO2.G.KWH}/1000' % mk('energy'), 'kg', '1h'),
+             'last(//%s)*{$INTERSIGHT.CO2.G.KWH}/1000' % mk('energy'), '!kg', '1h'),
         calc(T, '{#CLASS} {#MODEL}: hottest sensor', mk('temp.max'),
              'max(last_foreach(/*/intersight.temp.max?[group="%s"]))' % G, '°C'),
     ]
@@ -445,7 +510,7 @@ def parent(script):
         'description': 'Cisco Intersight (SaaS or appliance). Auth: API key v3 hs2019 (default), API key v2 rsa, or OAuth2. '
                        'Creates one host per server / chassis / Fabric Interconnect and feeds them with history.push. '
                        'Requires Zabbix 7.0+.',
-        'vendor': {'name': 'Custom', 'version': '7.0-5'},
+        'vendor': {'name': 'Custom', 'version': '7.0-6'},
         'groups': [{'name': TGROUP}],
         'items': items,
         'discovery_rules': disc,
@@ -458,13 +523,17 @@ def parent(script):
             macro('{$INTERSIGHT.CLIENT_SECRET}', '', 'OAuth2 client secret.', True),
             macro('{$INTERSIGHT.KEY_ID}', '', 'API key ID (hs2019 or rsa).'),
             macro('{$INTERSIGHT.SECRET}', '', 'Private key (EC for hs2019, RSA for rsa): full PEM with literal \\n, or base64 body on one line.', True),
-            macro('{$INTERSIGHT.WINDOW}', '15', 'Telemetry window in minutes.'),
+            macro('{$INTERSIGHT.WINDOW}', '10', 'Telemetry window in minutes. Default for the Advantage tier (collection every '
+                  'minute). Essentials and UMM collect every 10 minutes: set 30.'),
             macro('{$INTERSIGHT.DATASOURCE}', 'PhysicalEntities',
                   'Druid dataSource of hw.host, hw.temperature, hw.fan, hw.power_supply (Cisco doc).'),
             macro('{$INTERSIGHT.DATASOURCE.NETWORK}', 'NetworkInterfaces',
                   'Druid dataSource of hw.network (Cisco doc).'),
             macro('{$INTERSIGHT.COMPONENT.DIM}', 'name',
                   'Druid attribute naming a PSU / sensor / port (Cisco doc: name).'),
+            macro('{$INTERSIGHT.PERCENT.SCALE}', '100',
+                  'Multiplier turning raw utilizations into %. Intersight stores them as 0-1 ratios (checked in the '
+                  'raw data), although its doc says "%". Set 1 only if a future version returns 0-100.'),
             macro('{$INTERSIGHT.FLAT.SERVERS}', '1',
                   '1 = all servers discovered here. 0 = blades discovered under their chassis (Zabbix 7.4 nested).'),
             macro('{$ZABBIX.API.URL}', 'https://zabbix.example.com/api_jsonrpc.php',
@@ -477,7 +546,7 @@ def parent(script):
     }
 
 
-script = open(os.path.join(ROOT, 'src', 'collector.js')).read()
+script = strip_comments(open(os.path.join(ROOT, 'src', 'collector.js')).read())
 export = {'zabbix_export': {
     'version': '7.0',
     'template_groups': [{'uuid': uid('tg', TGROUP), 'name': TGROUP}],
