@@ -20,9 +20,31 @@ python3 tools/check_metrics_against_doc.py <Supported_Metrices.md>
 ```
 
 - `templates/*.yaml` is **generated**: never edit it by hand. CI fails if it is out of sync with `src/collector.js`.
+- **Zabbix limits item scripts to 65,535 characters.** The template embeds a comment-stripped copy of `src/collector.js` (`strip_comments()` in the generator; about 56k characters). Keep comments in the source. The generator, `tools/validate_template.py` and `tests/embedded_script.test.js` all fail if the limit is exceeded.
 - UUIDs are derived from names (stable across regenerations). Renaming an item key changes its UUID.
 - `src/collector.js` must stay **ES5** (Duktape). No `let`, `const`, arrow functions or template strings. CI checks this.
 - The **JSON contract** between the collector and the templates is documented at the top of `src/collector.js`. Renaming a field requires changing the matching JSONPath in `tools/generate_templates.py`.
+
+## Rule: no inferred metric names (user requirement)
+
+- The user explicitly asked: **do not infer**. Every Druid field must exist in `docs/intersight_metrics.json`, the catalog extracted from the Intersight "Supported Metrics" pages (`tools/build_metrics_catalog.py <folder of pages>`). `tests/documented_fields.test.js` fails on any other field or dataSource. The pages themselves (Cisco content) are not committed; the user provided them as Markdown.
+- History: an earlier version used fields guessed from naming patterns; the user caught it. Fields were then restricted to the DevNet pages, and later restored once the newer pages (uploaded by the user) documented them.
+- Computations must also be documented or follow from documented definitions (average = Sum / Count, shown in Cisco's Metrics Explorer example). Network throughput uses the formula of the intersight-grafana dashboards (github.com/3191110276/intersight-grafana, community repo, "best-effort", pointed to by the user): bits/s = sum(io_receive) / sum(io_receive_duration) * 8; link speed = longLast(bandwidth.limit) * 8 (documented in bytes/s). Label it as coming from those dashboards, not from Cisco docs.
+- Support lists matter: a device outside a metric's "Support information" returns no row. `hw.cpu`, `hw.temperature.limit_high_degraded` and `hw.fan.speed.limit_low_critical` are only listed for `*-mqtt` device types (`imm-blade-mqtt`, `imm-ism-rack-mqtt`, `imm-chassis-mqtt-*`). The pages do not define "-mqtt": do not guess, check on the user's appliance which items fill.
+- Default configuration targets the **Advantage** license (user requirement): 1-minute collection, 10-minute telemetry window. Essentials: 10-minute collection, window 30.
+
+## Telemetry query shape (from the intersight-grafana dashboards)
+
+- Dotted attributes are grouped through `nested-field` virtual columns (`host.name` -> `host_name`, path `$`); plain attributes (`name`) directly; filters use dotted names directly (`instrument.name`). `buildGroupBySpec()` in the collector does this for any dotted attribute.
+- **Not yet validated on the user's appliance, and critical**: if every telemetry item stays empty while inventory works, check this grouping first (run one query from the Metrics Explorer Code tab and compare).
+- Port role `hw.network.port.role` is grouped too; the template ignores roles `unconfigured|vethernet|vfc|vnic|vhba` by default, as the dashboards do.
+
+## Units (checked at the user's request)
+
+- **Verified by the user in the raw data of their appliance: utilizations are stored as 0-1 ratios** (0.1 = 10 %), although Cisco's doc gives the unit `%`. Consistent with the intersight-grafana dashboards (`* 100`, Grafana `percentunit`). One macro for all of them: `{$INTERSIGHT.PERCENT.SCALE}` = 100.
+- Runtime checks (`checkPercentage()`, idle check) report wrong scales in "API: last errors"; `tests/units.test.js` covers them.
+- Zabbix units: `!` prevents automatic K/M/G prefixes (Zabbix 7.0 doc "Unit symbols"; the old %, ms, rpm stoplist is deprecated). Use `!kWh`, `!kg`, `!EUR`, `!ms`, `!rpm`; `tests/units.test.js` rejects any other unit.
+- Network duration fields are taken as seconds (dashboard formula `bytes / duration * 8` labelled bps); not stated in Cisco's pages.
 
 ## Architecture (and why)
 
@@ -38,22 +60,20 @@ python3 tools/check_metrics_against_doc.py <Supported_Metrices.md>
 - Zabbix limits **HttpRequest objects** to 10 per script, so one object is reused for all Intersight calls.
 - `history.push` exists since Zabbix 7.0. It accepts host + key. If "Allowed hosts" is set on a trapper item, it must include the frontend IP.
 - **Nested LLD (discovery prototypes) only exists since Zabbix 7.4.**
-- Telemetry dataSources (Cisco DevNet): `hw.network` is in **NetworkInterfaces**; everything else is in **PhysicalEntities**.
+- Telemetry dataSources (catalog): `hw.network` is in **NetworkInterfaces**; everything else is in **PhysicalEntities**. Queries go to `/api/v1/telemetry/TimeSeries` (DevNet "Telemetry APIs - Query Syntax").
 - `host.name` is not unique (Cisco), so telemetry is matched on `host.type` + `host.name`.
-- Support matrices (Cisco DevNet):
-  - `hw.host.power` is NOT reported for IMM chassis. Their power is the sum of PSU `hw.power_out`.
-  - `hw.power_supply.utilization` is reported by Fabric Interconnects only.
-  - Only IMM/UCSM devices appear in the lists: standalone racks likely have no telemetry.
+- Support lists (catalog): `hw.host.power` is NOT reported for IMM chassis (their power = sum of PSU `hw.power`); ECC errors by blades and racks; `system.cpu` / `system.memory` by FIs; `hw.network.bandwidth.utilization_all` by blades, racks and FIs.
+  - Intersight help "Data Collection": metrics exist for IMM, UMM (environmental only) and ISM (standalone) servers. Collection every minute (Advantage) or 10 min (Essentials, UMM). Blades need IOM UCS-IOM-2408 / UCSX-I-9108-25G / UCSX-I-9108-100G; IMM needs a valid license on every server; FIs need NTP.
+  - Intersight help "Metrics Explorer": Average = Sum / count (documented example), and groupBy rows come under "event".
 - Appliance telemetry requires a metrics node (2- or 4-node cluster; not 3-node) or the single-node opt-in.
-- The appliance "Supported Metrics" doc (on-prem build 1.0.11-20261009…) lists every instrument and field used: 9 instruments, 30 fields. It does not give dataSources or per-device support. It is Cisco content: never commit it (it is in `.gitignore`).
+- The appliance "Supported Metrics" summary doc (on-prem build 1.0.11-20261009…, checked by `tools/check_metrics_against_doc.py`) lists metric names and units but not dataSources, rollup fields or per-device support; the per-instrument pages (catalog) do. Cisco content: never commit either (`Supported_Metrices.md` is in `.gitignore`).
 
 ## NOT verified yet (first things to check on the real system)
 
-- **The template has never been imported into a real Zabbix.** Expect possible import errors and fix them in the generator, not in the YAML.
+- **Import into the user's Zabbix 7.0:** the first attempt (7.0-5) failed with `Invalid parameter "/7/params": value is too long` (script over 65,535 characters), fixed in 7.0-6. **7.0-6 has not been imported yet** (pushed at the user's request before the import test). Other import errors are still possible: fix them in the generator, not in the YAML.
 - **ECDSA speed in Duktape is unknown.** It is about 10 ms per signature on V8 and about 280 ms on V8 without JIT. There are 13 signatures per run. Watch item "API: signing time (hs2019)". If too slow: add a fixed-base precomputation table for G, or drop queries from `TELEMETRY_QUERIES`.
-- **Rollup field suffixes** (`_max`, `_min`, `_count`, `_duration`) follow the DevNet pattern. The appliance doc only lists base metric names.
 - **Inventory fields** not confirmed on the appliance: FI `Version` and `OutOfBandIpAddress`, chassis `OperState`, and the blade↔chassis matching via `RegisteredDevice.Moid` + `ChassisId`.
-- **Response shapes**: list endpoints are assumed to return `{Results: [...]}` and Druid groupBy `[{event: {...}}]`.
+- **Response shapes**: list endpoints are assumed to return `{Results: [...]}` (the groupBy `[{event: {...}}]` shape is documented by the Metrics Explorer example).
 - `hw.status` is deliberately not used: its "one series per state" semantics were unclear.
 - The OAuth mode has never run against a real Intersight.
 
