@@ -31,6 +31,9 @@
  *    network_datasource  Druid dataSource of network metrics (Cisco doc: NetworkInterfaces)
  *    component_dim  Druid attribute naming one PSU / sensor / port (Cisco doc: name)
  *    flat_servers   1 = all servers in the "servers" LLD, 0 = rack servers only (7.4 nested)
+ *    percent_scale  multiplier turning the raw utilizations into % (default 100: Intersight
+ *                   stores them as 0-1 ratios, checked in the raw data of the user's
+ *                   appliance, although Cisco's doc gives the unit "%")
  *    zbx_url        Zabbix API URL, used by history.push
  *    zbx_token      Zabbix API token, used by history.push
  *
@@ -40,26 +43,28 @@
  *      power_w, power_max_w, power_source, power_state,
  *      temp_max, temp_margin_min, temp_margin_degraded_min,
  *      fan_min, fan_max, fan_margin_min, psu_util_max,
- *      cpu_util, cpu_util_max, mem_util,
- *      mem_ecc_correctable, mem_ecc_uncorrectable, mem_ecc_dimms,
- *      net_rx_bps, net_tx_bps, net_errors,
- *      firmware, mgmt_ip, oper_state, chassis_key, is_blade,
- *      psus  [ {name, util, out_w} ],  ports [ {name, rx_bps, tx_bps, util, up, errors} ],
+ *      cpu_util, cpu_util_max, mem_util, mem_ecc_correctable, mem_ecc_uncorrectable, mem_ecc_dimms,
+ *      net_errors, firmware, mgmt_ip, oper_state, chassis_key, is_blade,
+ *      psus  [ {name, util, out_w, in_w} ],
+ *      ports [ {name, role, rx_bps, tx_bps, speed_bps, util, up, errors} ]  (bits per second),
  *      blades [ {moid, display, model} ]   (chassis only)
  *    Returned document:
  *      ts, api {calls, errors[], duration_ms, sign_ms}, counts {servers, chassis, fi},
  *      alarms {critical, warning, info}, push {enabled, sent, failed},
  *      servers[], chassis[], fis[], models [ {class, model, group} ]
  *
- *  METRIC SOURCES
- *    Metric names: Intersight appliance doc "Supported Metrics" (on-prem, IMM metrics).
- *    dataSources and per-device support: Cisco DevNet "Supported Metrics" pages
- *    (the appliance doc does not list them).
- *    The "Support information" of each metric tells which devices report it:
- *      - hw.host.power ............. blades, racks, FI, UCSM chassis (NOT IMM chassis)
- *      - hw.power_out (per PSU) .... chassis, FI, racks  -> used for IMM chassis power
- *      - hw.power_supply.utilization  FI only
- *      - only devices in a UCS domain (IMM / UCSM) appear in the support lists
+ *  METRIC SOURCES (rule: no inferred field name)
+ *    Every Druid field queried below appears in an "Available metrics" table of the Cisco
+ *    Intersight "Supported Metrics" pages (intersight.com/apidocs/introduction/<instrument>).
+ *    docs/intersight_metrics.json is the catalog extracted from those pages
+ *    (tools/build_metrics_catalog.py); tests/documented_fields.test.js fails if the
+ *    collector queries a field or uses a dataSource that is not in the catalog.
+ *    The "Support information" of each metric tells which devices report it, e.g.:
+ *      - hw.host.power ........................ blades, racks, FI (NOT IMM chassis)
+ *      - hw.power (PSU input power) ........... chassis, FI, racks -> IMM chassis power
+ *      - hw.cpu, hw.temperature.limit_high_degraded ... imm-blade-mqtt, imm-ism-rack-mqtt
+ *      - hw.fan.speed.limit_low_critical ...... imm-chassis-mqtt-*, imm-ism-rack-mqtt
+ *    Devices outside a metric's support list return no row: the item stays empty.
  *    Intersight Virtual Appliance: metrics need a metrics node (multi-node deployment)
  *    or the opt-in collection of a single-node deployment.
  *
@@ -80,7 +85,10 @@ var itemParameters = JSON.parse(value);
 var CONFIG = {
     authMode: String(itemParameters.auth || 'hs2019').toLowerCase(),
     apiHost: itemParameters.api_host || 'intersight.com',
-    telemetryWindowMinutes: parseInt(itemParameters.window || '15', 10),
+    // Collection interval (Intersight help "Data Collection"): 1 min with the Advantage
+    // tier, 10 min with Essentials (and for UMM). Default 10 min = Advantage; use 30 with
+    // Essentials so that each window keeps at least 2 samples.
+    telemetryWindowMinutes: parseInt(itemParameters.window || '10', 10),
     // Druid dataSources, as documented per instrument by Cisco.
     druidPhysicalDataSource: itemParameters.datasource || 'PhysicalEntities',
     druidNetworkDataSource: itemParameters.network_datasource || 'NetworkInterfaces',
@@ -88,6 +96,10 @@ var CONFIG = {
     // When false, blades are left out of the "servers" LLD: they are discovered under
     // their chassis instead (Zabbix 7.4 nested discovery). They are still pushed.
     discoverBladesAsServers: String(itemParameters.flat_servers) !== '0',
+    // Utilizations are stored by Intersight as 0-1 ratios (raw data checked on the user's
+    // appliance; the intersight-grafana dashboards also multiply them by 100), although
+    // Cisco's doc gives the unit "%". checkPercentage() flags any value above 100 %.
+    percentScale: parseFloat(itemParameters.percent_scale || '100'),
     // Push is enabled only when both URL and token are set (not left as raw macros).
     pushEnabled: !!(itemParameters.zbx_url && itemParameters.zbx_token &&
         itemParameters.zbx_url.indexOf('{$') !== 0)
@@ -98,7 +110,8 @@ var INTERSIGHT_PATHS = {
     chassis: '/api/v1/equipment/Chasses',
     fabricInterconnects: '/api/v1/network/ElementSummaries',
     alarms: '/api/v1/cond/Alarms',
-    telemetryGroupBy: '/api/v1/telemetry/GroupBys',
+    // Cisco DevNet "Telemetry APIs - Query Syntax": queries (groupBy included) use TimeSeries.
+    telemetryQuery: '/api/v1/telemetry/TimeSeries',
     oauthToken: '/iam/token'
 };
 
@@ -126,6 +139,10 @@ var DEVICE_CLASS_BY_HOST_TYPE = {
     'network.Element': 'fi'
 };
 var UNKNOWN_DEVICE_CLASS = 'any';
+
+// Attributes every telemetry query is grouped by (component attribute and per-query
+// extraAttributes are added to these). All are listed in docs/intersight_metrics.json.
+var GROUP_BY_ATTRIBUTES = ['host.name', 'host.type'];
 
 // Run statistics, reported in the "api" section of the output.
 var runStartTime = new Date().getTime();
@@ -235,6 +252,20 @@ function objectValues(sourceObject) {
         if (sourceObject.hasOwnProperty(key)) { values.push(sourceObject[key]); }
     }
     return values;
+}
+
+// Sanity check of a percentage after scaling: above 100 % means the scale macro is wrong
+// (e.g. a value already in percent multiplied by 100). Reported once per metric and run.
+var reportedUnitProblems = {};
+// Raw system.cpu idle values of the run, to detect a 0-1 ratio read as a percentage.
+var rawIdleValues = [];
+function checkPercentage(metricName, percentValue, scaleMacro) {
+    if (percentValue !== null && percentValue > 100.5 && !reportedUnitProblems[metricName]) {
+        reportedUnitProblems[metricName] = true;
+        collectedErrors.push('units: ' + metricName + ' = ' + percentValue + ' % after scaling (above 100): ' +
+            'check ' + scaleMacro + ' (1 if Intersight already returns a percentage, 100 if it returns 0-1)');
+    }
+    return percentValue;
 }
 
 // Runs a collection step. On failure, records the error and returns null, so that one
@@ -841,18 +872,48 @@ function listAllObjects(path, odataFilter, odataSelect) {
     return allObjects;
 }
 
+// Name under which an attribute appears in the result rows. Dotted attributes are read
+// through a "nested-field" virtual column renamed with underscores (host.name ->
+// host_name), the pattern used by the intersight-grafana dashboards
+// (github.com/3191110276/intersight-grafana). Plain attributes ("name") are grouped
+// on directly.
+function rowFieldName(attributeName) {
+    return attributeName.replace(/\./g, '_');
+}
+
+function buildGroupBySpec(attributeNames) {
+    var dimensions = [], virtualColumns = [], index, attributeName;
+    for (index = 0; index < attributeNames.length; index++) {
+        attributeName = attributeNames[index];
+        if (attributeName.indexOf('.') === -1) {
+            dimensions.push(attributeName);
+        }
+        else {
+            dimensions.push(rowFieldName(attributeName));
+            virtualColumns.push({
+                type: 'nested-field', columnName: attributeName, outputName: rowFieldName(attributeName),
+                expectedType: 'STRING', path: '$'
+            });
+        }
+    }
+    return { dimensions: dimensions, virtualColumns: virtualColumns };
+}
+
 // Runs a Druid "groupBy" query over the telemetry window, for one instrument
 // (e.g. "hw.host"), and returns the result rows as flat objects.
-function runTelemetryGroupBy(dataSource, instrumentName, groupByDimensions, aggregations, timeInterval) {
-    var response = callIntersightApi('POST', INTERSIGHT_PATHS.telemetryGroupBy, {
+function runTelemetryGroupBy(dataSource, instrumentName, groupByAttributes, aggregations, timeInterval) {
+    var groupBy = buildGroupBySpec(groupByAttributes);
+    var query = {
         queryType: 'groupBy',
         dataSource: dataSource,
         granularity: 'all',                 // one result per group for the whole window
         intervals: [timeInterval],
-        dimensions: groupByDimensions,
+        dimensions: groupBy.dimensions,
         filter: { type: 'selector', dimension: 'instrument.name', value: instrumentName },
         aggregations: aggregations
-    });
+    };
+    if (groupBy.virtualColumns.length) { query.virtualColumns = groupBy.virtualColumns; }
+    var response = callIntersightApi('POST', INTERSIGHT_PATHS.telemetryQuery, query);
     var rows = [], index;
     for (index = 0; index < response.length; index++) {
         // Druid returns {event: {...}}; other shapes are accepted defensively.
@@ -864,25 +925,25 @@ function runTelemetryGroupBy(dataSource, instrumentName, groupByDimensions, aggr
 // =====================================================================================
 //  6. TELEMETRY DEFINITIONS
 // =====================================================================================
-//  One entry per Druid query. To add a metric: add an entry here, add the field to the
-//  device object in buildCommonDeviceFields(), then add a dependent item in the template.
+//  One entry per Druid query. To add a metric: add an entry here (documented fields only,
+//  see docs/intersight_metrics.json), add the field to the device object in
+//  buildCommonDeviceFields(), then add a dependent item in the template.
 //
 //    instrument     Druid "instrument.name" value
-//    dataSource     'physical' or 'network' (Cisco documents one dataSource per instrument)
-//    perComponent   true = also grouped by the component dimension (one row per PSU/port)
-//    aggregations   Druid aggregators. Intersight stores each metric as fields such as
-//                   <metric> (sum), <metric>_count, <metric>_max, <metric>_min:
-//                   average = sum / count.
+//    dataSource     'physical' (PhysicalEntities) or 'network' (NetworkInterfaces), as
+//                   stated on the instrument's "Supported Metrics" page
+//    perComponent   true = also grouped by the component attribute "name" (one row per
+//                   sensor / fan / PSU / DIMM / port)
+//    aggregations   Druid aggregators on the fields of the "Available metrics" tables:
+//                   <metric> (Sum), <metric>_count (Count), <metric>_max / _min.
+//                   Average of a gauge = Sum / Count.
 //    storeRow       copies one result row into the telemetry of its device
-//                   (and of its component when perComponent is true)
 //
-//  Field names follow the Cisco DevNet "Supported Metrics" pages. A metric that a device
-//  does not report simply returns no row: the matching Zabbix item stays empty.
+//  A metric that a device does not report simply returns no row: the item stays empty.
 
 var TELEMETRY_QUERIES = [
     {
-        // Power of a server or FI. Not reported by IMM chassis: their power is
-        // computed from the PSU output (see hw.power_supply).
+        // Page "hw-host". Reported by blades, racks and FI.
         instrument: 'hw.host',
         dataSource: 'physical',
         perComponent: false,
@@ -897,9 +958,10 @@ var TELEMETRY_QUERIES = [
         }
     },
     {
-        // Grouped per sensor, so that each sensor is compared with its OWN thresholds:
-        //   limit_high_degraded = non-critical threshold, limit_high_critical = critical.
-        // A fixed threshold does not fit CPU, inlet and PSU sensors at the same time.
+        // Page "hw-temperature". Grouped per sensor, to compare each sensor with its OWN
+        // thresholds (a fixed threshold does not fit CPU, inlet and PSU sensors at once).
+        //   limit_high_critical: FI, imm-blade-mqtt, imm-ism-rack-mqtt
+        //   limit_high_degraded (upper non critical): imm-blade-mqtt, imm-ism-rack-mqtt
         // CPU temperatures are only reported while the host is powered on.
         instrument: 'hw.temperature',
         dataSource: 'physical',
@@ -915,7 +977,7 @@ var TELEMETRY_QUERIES = [
             var highDegradedLimit = numberOrNull(row.highDegradedLimit);
             deviceTelemetry.temp_max = maxIgnoringNull(deviceTelemetry.temp_max, roundToOneDecimal(temperature));
             if (temperature === null) { return; }
-            // Margins = distance to each threshold (negative = threshold exceeded).
+            // Margins = distance to each threshold of the sensor (negative = exceeded).
             if (highCriticalLimit !== null && highCriticalLimit > 0) {
                 deviceTelemetry.temp_margin_min = minIgnoringNull(deviceTelemetry.temp_margin_min,
                     roundToOneDecimal(highCriticalLimit - temperature));
@@ -927,7 +989,8 @@ var TELEMETRY_QUERIES = [
         }
     },
     {
-        // Grouped per fan, to compare each fan with its own lower critical speed.
+        // Page "hw-fan". Speed: chassis, racks, FI. Grouped per fan, to compare each fan with
+        // its own lower critical limit (imm-chassis-mqtt-*, imm-ism-rack-mqtt).
         instrument: 'hw.fan',
         dataSource: 'physical',
         perComponent: true,
@@ -941,7 +1004,7 @@ var TELEMETRY_QUERIES = [
             var lowCriticalLimit = numberOrNull(row.lowCriticalLimit);
             deviceTelemetry.fan_min = minIgnoringNull(deviceTelemetry.fan_min, roundToOneDecimal(speedMin));
             deviceTelemetry.fan_max = maxIgnoringNull(deviceTelemetry.fan_max, roundToOneDecimal(numberOrNull(row.fanSpeedMax)));
-            // Margin in rpm above the lower critical limit (negative = fan too slow).
+            // Margin in rpm above the fan's own lower critical limit (negative = too slow).
             if (speedMin !== null && lowCriticalLimit !== null && lowCriticalLimit > 0) {
                 deviceTelemetry.fan_margin_min = minIgnoringNull(deviceTelemetry.fan_margin_min,
                     roundToOneDecimal(speedMin - lowCriticalLimit));
@@ -949,34 +1012,41 @@ var TELEMETRY_QUERIES = [
         }
     },
     {
-        // hw.power_supply.utilization: Fabric Interconnects only (Cisco DevNet).
-        // hw.power_out: chassis, FI and racks.
+        // Page "hw-power_supply".
+        //   hw.power (power drawn by the PSU) and hw.power_out: chassis, racks and FI.
+        //   hw.power_supply.utilization: FI only.
         instrument: 'hw.power_supply',
         dataSource: 'physical',
         perComponent: true,
         aggregations: [
             { type: 'doubleMax', name: 'utilizationMax', fieldName: 'hw.power_supply.utilization_max' },
             { type: 'doubleSum', name: 'outputPowerSum', fieldName: 'hw.power_out' },
-            { type: 'longSum', name: 'outputPowerCount', fieldName: 'hw.power_out_count' }
+            { type: 'longSum', name: 'outputPowerCount', fieldName: 'hw.power_out_count' },
+            { type: 'doubleSum', name: 'inputPowerSum', fieldName: 'hw.power' },
+            { type: 'longSum', name: 'inputPowerCount', fieldName: 'hw.power_count' }
         ],
         storeRow: function (row, deviceTelemetry, componentName) {
-            var utilization = roundToOneDecimal(numberOrNull(row.utilizationMax));
+            var rawUtilization = numberOrNull(row.utilizationMax);
+            var utilization = checkPercentage('hw.power_supply.utilization',
+                rawUtilization === null ? null : roundToOneDecimal(rawUtilization * CONFIG.percentScale), '{$INTERSIGHT.PERCENT.SCALE}');
             var outputPower = divideOrNull(row.outputPowerSum, row.outputPowerCount);
+            var inputPower = divideOrNull(row.inputPowerSum, row.inputPowerCount);
             var powerSupply = { name: componentName };
             setIfPresent(powerSupply, 'util', utilization);
             setIfPresent(powerSupply, 'out_w', roundToOneDecimal(outputPower));
+            setIfPresent(powerSupply, 'in_w', roundToOneDecimal(inputPower));
             deviceTelemetry.powerSuppliesByName[componentName] = powerSupply;
             deviceTelemetry.psu_util_max = maxIgnoringNull(deviceTelemetry.psu_util_max, utilization);
-            // Total PSU output: power of the device when hw.host.power is not reported
-            // (IMM chassis). Output power is slightly below the input (wall) power.
-            if (outputPower !== null) {
-                deviceTelemetry.psu_output_total_w = (deviceTelemetry.psu_output_total_w || 0) + outputPower;
+            // Total power drawn by the PSUs: power of the device when hw.host.power is not
+            // reported (IMM chassis).
+            if (inputPower !== null) {
+                deviceTelemetry.psu_input_total_w = (deviceTelemetry.psu_input_total_w || 0) + inputPower;
             }
         }
     },
     {
-        // Memory modules (servers and FI). ECC errors are counters: their sum over the
-        // window is the number of new errors during the window.
+        // Page "hw-memory". Blades and racks only, host powered on.
+        // A non-zero sum over the window means errors were reported during the window.
         instrument: 'hw.memory',
         dataSource: 'physical',
         perComponent: true,
@@ -997,27 +1067,27 @@ var TELEMETRY_QUERIES = [
         }
     },
     {
-        // Physical processors of a server: C0 utilization (time spent executing).
+        // Page "hw-cpu": "a single aggregated value across all CPUs" of the server.
+        // Support: imm-blade-mqtt, imm-ism-rack-mqtt.
         instrument: 'hw.cpu',
         dataSource: 'physical',
-        perComponent: true,
+        perComponent: false,
         aggregations: [
             { type: 'doubleSum', name: 'utilizationSum', fieldName: 'hw.cpu.utilization_c0' },
             { type: 'longSum', name: 'utilizationCount', fieldName: 'hw.cpu.utilization_c0_count' },
             { type: 'doubleMax', name: 'utilizationMax', fieldName: 'hw.cpu.utilization_c0_max' }
         ],
         storeRow: function (row, deviceTelemetry) {
-            // Device average = all samples of all processors together.
-            if (numberOrNull(row.utilizationSum) === null || !numberOrNull(row.utilizationCount)) { return; }
-            deviceTelemetry.cpuUtilizationSum = (deviceTelemetry.cpuUtilizationSum || 0) + row.utilizationSum;
-            deviceTelemetry.cpuUtilizationCount = (deviceTelemetry.cpuUtilizationCount || 0) + row.utilizationCount;
-            deviceTelemetry.cpu_util = roundToOneDecimal(deviceTelemetry.cpuUtilizationSum / deviceTelemetry.cpuUtilizationCount);
-            deviceTelemetry.cpu_util_max = maxIgnoringNull(deviceTelemetry.cpu_util_max,
-                roundToOneDecimal(numberOrNull(row.utilizationMax)));
+            var average = divideOrNull(row.utilizationSum, row.utilizationCount);
+            var peak = numberOrNull(row.utilizationMax);
+            deviceTelemetry.cpu_util = checkPercentage('hw.cpu.utilization_c0',
+                average === null ? null : roundToOneDecimal(average * CONFIG.percentScale), '{$INTERSIGHT.PERCENT.SCALE}');
+            deviceTelemetry.cpu_util_max = checkPercentage('hw.cpu.utilization_c0',
+                peak === null ? null : roundToOneDecimal(peak * CONFIG.percentScale), '{$INTERSIGHT.PERCENT.SCALE}');
         }
     },
     {
-        // System-level CPU (Fabric Interconnects): utilization = 100 - idle.
+        // Page "system-cpu". FI only. Utilization = 100 - idle percentage.
         instrument: 'system.cpu',
         dataSource: 'physical',
         perComponent: false,
@@ -1027,14 +1097,14 @@ var TELEMETRY_QUERIES = [
         ],
         storeRow: function (row, deviceTelemetry) {
             var idle = divideOrNull(row.idleSum, row.idleCount);
-            // hw.cpu (per processor) takes precedence when both exist.
-            if (idle !== null && deviceTelemetry.cpu_util === undefined) {
-                deviceTelemetry.cpu_util = roundToOneDecimal(100 - idle);
-            }
+            if (idle === null) { return; }
+            rawIdleValues.push(idle);
+            idle = checkPercentage('system.cpu.utilization_idle', idle * CONFIG.percentScale, '{$INTERSIGHT.PERCENT.SCALE}');
+            deviceTelemetry.cpu_util = roundToOneDecimal(Math.max(0, 100 - idle));
         }
     },
     {
-        // System-level memory (Fabric Interconnects).
+        // Page "system-memory". FI only.
         instrument: 'system.memory',
         dataSource: 'physical',
         perComponent: false,
@@ -1043,19 +1113,28 @@ var TELEMETRY_QUERIES = [
             { type: 'longSum', name: 'utilizationCount', fieldName: 'system.memory.utilization_count' }
         ],
         storeRow: function (row, deviceTelemetry) {
-            deviceTelemetry.mem_util = roundToOneDecimal(divideOrNull(row.utilizationSum, row.utilizationCount));
+            var average = divideOrNull(row.utilizationSum, row.utilizationCount);
+            deviceTelemetry.mem_util = checkPercentage('system.memory.utilization',
+                average === null ? null : roundToOneDecimal(average * CONFIG.percentScale), '{$INTERSIGHT.PERCENT.SCALE}');
         }
     },
     {
-        // Network metrics are in their own dataSource, NetworkInterfaces (Cisco DevNet).
+        // Page "hw-network", dataSource NetworkInterfaces. Blades, racks and FI.
+        // Throughput: same formula as the intersight-grafana dashboards (domain
+        // "util-bps" panels): bits/s = sum(io_receive) / sum(io_receive_duration) * 8, i.e.
+        // bytes over the measured seconds. Link speed: bandwidth.limit, documented in bytes
+        // per second, * 8. The port role (hw.network.port.role) lets the template ignore
+        // virtual interfaces, as those dashboards do.
         instrument: 'hw.network',
         dataSource: 'network',
         perComponent: true,
+        extraAttributes: ['hw.network.port.role'],
         aggregations: [
-            { type: 'doubleSum', name: 'receivedBytes', fieldName: 'hw.network.io_receive' },
+            { type: 'longSum', name: 'receivedBytes', fieldName: 'hw.network.io_receive' },
             { type: 'doubleSum', name: 'receiveDuration', fieldName: 'hw.network.io_receive_duration' },
-            { type: 'doubleSum', name: 'transmittedBytes', fieldName: 'hw.network.io_transmit' },
+            { type: 'longSum', name: 'transmittedBytes', fieldName: 'hw.network.io_transmit' },
             { type: 'doubleSum', name: 'transmitDuration', fieldName: 'hw.network.io_transmit_duration' },
+            { type: 'longLast', name: 'linkSpeedBytes', fieldName: 'hw.network.bandwidth.limit' },
             { type: 'doubleSum', name: 'receiveErrors', fieldName: 'hw.errors_network_receive_all' },
             { type: 'doubleSum', name: 'transmitErrors', fieldName: 'hw.errors_network_transmit_all' },
             { type: 'doubleSum', name: 'utilizationSum', fieldName: 'hw.network.bandwidth.utilization_all' },
@@ -1063,26 +1142,29 @@ var TELEMETRY_QUERIES = [
             { type: 'doubleMin', name: 'linkUpMin', fieldName: 'hw.network.up_min' }
         ],
         storeRow: function (row, deviceTelemetry, componentName) {
-            // Throughput = bytes / measurement duration.
             var receiveRate = divideOrNull(row.receivedBytes, row.receiveDuration);
             var transmitRate = divideOrNull(row.transmittedBytes, row.transmitDuration);
+            var linkSpeed = numberOrNull(row.linkSpeedBytes);
             var receiveErrors = numberOrNull(row.receiveErrors), transmitErrors = numberOrNull(row.transmitErrors);
             var linkUpMin = numberOrNull(row.linkUpMin);
             var port = { name: componentName };
-            setIfPresent(port, 'rx_bps', roundToOneDecimal(receiveRate));
-            setIfPresent(port, 'tx_bps', roundToOneDecimal(transmitRate));
-            setIfPresent(port, 'util', roundToOneDecimal(divideOrNull(row.utilizationSum, row.utilizationCount)));
-            // Link state over the window: 0 if the link was down at least once.
+            setIfPresent(port, 'role', row[rowFieldName('hw.network.port.role')]);
+            setIfPresent(port, 'rx_bps', receiveRate === null ? null : Math.round(receiveRate * 8));
+            setIfPresent(port, 'tx_bps', transmitRate === null ? null : Math.round(transmitRate * 8));
+            setIfPresent(port, 'speed_bps', linkSpeed === null || linkSpeed <= 0 ? null : linkSpeed * 8);
+            var utilization = divideOrNull(row.utilizationSum, row.utilizationCount);
+            setIfPresent(port, 'util', checkPercentage('hw.network.bandwidth.utilization_all',
+                utilization === null ? null : roundToOneDecimal(utilization * CONFIG.percentScale),
+                '{$INTERSIGHT.PERCENT.SCALE}'));
+            // Link state over the window: 0 if the link was down at least once (Cisco doc:
+            // minimum of an up/down metric = down at least once during the interval).
             if (linkUpMin !== null) { port.up = linkUpMin > 0 ? 1 : 0; }
-            // Errors counted during the telemetry window (receive + transmit).
+            // Errors reported during the window (receive + transmit).
             if (receiveErrors !== null || transmitErrors !== null) {
                 port.errors = (receiveErrors || 0) + (transmitErrors || 0);
                 deviceTelemetry.net_errors = (deviceTelemetry.net_errors || 0) + port.errors;
             }
             deviceTelemetry.portsByName[componentName] = port;
-            // Device totals = sum of all its ports.
-            deviceTelemetry.net_rx_bps = roundToOneDecimal((deviceTelemetry.net_rx_bps || 0) + (receiveRate || 0));
-            deviceTelemetry.net_tx_bps = roundToOneDecimal((deviceTelemetry.net_tx_bps || 0) + (transmitRate || 0));
         }
     }
 ];
@@ -1099,8 +1181,8 @@ function collectTelemetryByDeviceKey(timeInterval) {
     var telemetryByDeviceKey = {};
 
     function getDeviceTelemetry(row) {
-        var deviceClass = DEVICE_CLASS_BY_HOST_TYPE[row['host.type']] || UNKNOWN_DEVICE_CLASS;
-        var key = buildTelemetryKey(deviceClass, row['host.name']);
+        var deviceClass = DEVICE_CLASS_BY_HOST_TYPE[row[rowFieldName('host.type')]] || UNKNOWN_DEVICE_CLASS;
+        var key = buildTelemetryKey(deviceClass, row[rowFieldName('host.name')]);
         if (!telemetryByDeviceKey[key]) {
             telemetryByDeviceKey[key] = { powerSuppliesByName: {}, portsByName: {}, dimmsWithErrors: [] };
         }
@@ -1109,13 +1191,14 @@ function collectTelemetryByDeviceKey(timeInterval) {
 
     function runOneQuery(query) {
         var dataSource = (query.dataSource === 'network') ? CONFIG.druidNetworkDataSource : CONFIG.druidPhysicalDataSource;
-        var dimensions = ['host.name', 'host.type'];
-        if (query.perComponent) { dimensions.push(CONFIG.druidComponentDimension); }
-        var rows = runTelemetryGroupBy(dataSource, query.instrument, dimensions, query.aggregations, timeInterval);
+        var attributes = GROUP_BY_ATTRIBUTES.slice(0);
+        if (query.perComponent) { attributes.push(CONFIG.druidComponentDimension); }
+        attributes = attributes.concat(query.extraAttributes || []);
+        var rows = runTelemetryGroupBy(dataSource, query.instrument, attributes, query.aggregations, timeInterval);
         var rowIndex, row, componentName;
         for (rowIndex = 0; rowIndex < rows.length; rowIndex++) {
             row = rows[rowIndex];
-            componentName = query.perComponent ? (row[CONFIG.druidComponentDimension] || ('component' + rowIndex)) : null;
+            componentName = query.perComponent ? (row[rowFieldName(CONFIG.druidComponentDimension)] || ('component' + rowIndex)) : null;
             query.storeRow(row, getDeviceTelemetry(row), componentName);
         }
     }
@@ -1125,6 +1208,16 @@ function collectTelemetryByDeviceKey(timeInterval) {
         (function (query) {
             runStepOrRecordError('telemetry ' + query.instrument, function () { runOneQuery(query); });
         }(TELEMETRY_QUERIES[queryIndex]));
+    }
+    // Idle CPU of every FI at or below 1 with scale 1: almost certainly a 0-1 ratio read as a
+    // percentage (it would mean every FI is 99-100 % busy).
+    var allIdleAtMostOne = rawIdleValues.length > 0, idleIndex;
+    for (idleIndex = 0; idleIndex < rawIdleValues.length; idleIndex++) {
+        if (rawIdleValues[idleIndex] > 1) { allIdleAtMostOne = false; }
+    }
+    if (CONFIG.percentScale === 1 && allIdleAtMostOne) {
+        collectedErrors.push('units: system.cpu.utilization_idle <= 1 on every FI: if the Intersight UI shows ' +
+            'an idle CPU near 100 %, the values are 0-1 ratios: set {$INTERSIGHT.PERCENT.SCALE} to 100');
     }
     return telemetryByDeviceKey;
 }
@@ -1160,14 +1253,14 @@ function buildCommonDeviceFields(deviceClass, inventoryObject, telemetryByDevice
     setIfPresent(device, 'alarm_warning', numberOrNull(alarmSummary.Warning));
 
     if (telemetry) {
-        // Power: hw.host.power when reported, otherwise the total PSU output power.
+        // Power: hw.host.power when reported, otherwise the power drawn by the PSUs.
         if (numberOrNull(telemetry.power_w) !== null) {
             device.power_w = telemetry.power_w;
             device.power_source = 'host';
         }
-        else if (numberOrNull(telemetry.psu_output_total_w) !== null) {
-            device.power_w = roundToOneDecimal(telemetry.psu_output_total_w);
-            device.power_source = 'psu_output';
+        else if (numberOrNull(telemetry.psu_input_total_w) !== null) {
+            device.power_w = roundToOneDecimal(telemetry.psu_input_total_w);
+            device.power_source = 'psu_input';
         }
         setIfPresent(device, 'power_max_w', telemetry.power_max_w);
         setIfPresent(device, 'temp_max', telemetry.temp_max);
@@ -1186,8 +1279,6 @@ function buildCommonDeviceFields(deviceClass, inventoryObject, telemetryByDevice
         setIfPresent(device, 'fan_min', telemetry.fan_min);
         setIfPresent(device, 'fan_max', telemetry.fan_max);
         setIfPresent(device, 'psu_util_max', telemetry.psu_util_max);
-        setIfPresent(device, 'net_rx_bps', telemetry.net_rx_bps);
-        setIfPresent(device, 'net_tx_bps', telemetry.net_tx_bps);
     }
     device.psus = telemetry ? objectValues(telemetry.powerSuppliesByName) : [];
     device.ports = telemetry ? objectValues(telemetry.portsByName) : [];
