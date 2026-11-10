@@ -5,6 +5,10 @@
 
 # Cisco documentation (not redistributable): keep it local
 Supported_Metrices.md
+cisco-docs/
+
+# Parameters of local zabbix_js runs: they contain the private key
+params.json
 
 # Editors / OS
 .vscode/

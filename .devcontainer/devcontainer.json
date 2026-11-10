@@ -1,0 +1,32 @@
+{
+  "name": "zabbix-cisco-intersight",
+  "build": { "dockerfile": "Dockerfile" },
+  "features": {
+    "ghcr.io/devcontainers/features/node:1": { "version": "20" }
+  },
+  "remoteUser": "vscode",
+
+  "runArgs": ["--cap-add=NET_ADMIN", "--cap-add=NET_RAW"],
+
+  "mounts": [
+    "source=intersight-claude-config-${devcontainerId},target=/home/vscode/.claude,type=volume"
+  ],
+
+  "containerEnv": {
+    "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC": "1",
+    "INTERSIGHT_APPLIANCE_HOST": "${localEnv:INTERSIGHT_APPLIANCE_HOST}"
+  },
+
+  "postStartCommand": "sudo /usr/local/bin/intersight-init-firewall.sh \"$INTERSIGHT_APPLIANCE_HOST\" && node tests/run_all.js && python3 tools/validate_template.py",
+  "waitFor": "postStartCommand",
+
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "anthropic.claude-code",
+        "redhat.vscode-yaml",
+        "ms-python.python"
+      ]
+    }
+  }
+}

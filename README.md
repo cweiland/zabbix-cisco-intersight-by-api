@@ -14,6 +14,8 @@ Supervision de Cisco Intersight (SaaS ou Virtual Appliance) dans Zabbix 7.0 LTS,
 | `src/collector.js` | Script de collecte (ES5 / Duktape), embarqué dans le template |
 | `tools/generate_templates.py` | Régénère le YAML depuis `src/collector.js` |
 | `tools/validate_template.py` | Contrôles structurels du YAML généré (macros, UUID, clés, triggers) |
+| `tools/ci.sh` | Lance en local toutes les vérifications de la CI GitHub |
+| `.devcontainer/` | Bac à sable de développement : conteneur, pare-feu sortant, mêmes versions que la CI |
 | `docs/intersight_metrics.json` | Catalogue des métriques Intersight (instruments, champs Druid, équipements supportés) |
 | `tools/build_metrics_catalog.py` | Reconstruit ce catalogue depuis les pages « Supported Metrics » |
 | `tools/check_metrics_against_doc.py` | Vérifie les métriques utilisées contre la doc « Supported Metrics » de ton appliance |
@@ -27,9 +29,22 @@ Supervision de Cisco Intersight (SaaS ou Virtual Appliance) dans Zabbix 7.0 LTS,
 node tests/run_all.js                  # tous les tests (Node.js 16+)
 python3 tools/generate_templates.py    # après toute modification de src/collector.js (PyYAML)
 python3 tools/check_metrics_against_doc.py Supported_Metrices.md
+tools/ci.sh                            # toutes les vérifications de la CI, avant chaque commit
 ```
 
 Le YAML est généré : **ne pas l'éditer à la main**. Il embarque une copie de `src/collector.js` sans commentaires, car Zabbix limite les scripts à 65 535 caractères. Il faut modifier `src/collector.js` ou `tools/generate_templates.py`, puis régénérer. La CI vérifie que le template commité correspond au script, que le code reste en ES5, et que tous les tests passent. Les UUID sont dérivés des noms, donc stables d'une génération à l'autre.
+
+### Environnement de développement (bac à sable)
+
+Le dépôt fournit un devcontainer (`.devcontainer/`) : Ubuntu 24.04 avec Node 20, Python 3.12 et PyYAML 6.0.3, les mêmes versions que la CI, plus l'extension Claude Code.
+
+- **Prérequis** : VS Code avec l'extension Dev Containers, et un moteur Docker. Sous Windows, le plus simple sans licence est Docker Engine installé dans une distribution WSL ; Docker Desktop est payant dans les entreprises de plus de 250 salariés ou de plus de 10 M$ de chiffre d'affaires.
+- **Ouverture** : commande « Dev Containers: Reopen in Container ». Au démarrage, le pare-feu est appliqué, puis les tests et le validateur tournent : si l'environnement est cassé, tu le sais tout de suite.
+- **Pare-feu sortant** : tout est bloqué sauf l'API Anthropic, GitHub et les extensions VS Code. Il se ferme en cas d'échec : une erreur pendant sa mise en place laisse le conteneur bloqué, pas ouvert. Le seul `sudo` autorisé dans le conteneur est ce script, donc rien de ce qui y tourne, Claude Code compris, ne peut lever les règles. Pour installer un outil, il faut l'ajouter au `Dockerfile` et reconstruire.
+- **Accès à l'appliance Intersight** (HTTPS uniquement) : définis `INTERSIGHT_APPLIANCE_HOST` dans l'environnement où VS Code est lancé, avant d'ouvrir le conteneur. Sans cette variable, l'appliance est injoignable depuis le conteneur. Les tests n'en ont pas besoin : tous les appels sont simulés.
+- **Si une connexion légitime est bloquée** (par exemple pour la connexion de Claude Code), ajoute le domaine à `ALLOWED_DOMAINS` dans `.devcontainer/intersight-init-firewall.sh`.
+- **Limite connue** : comme dans la configuration de référence d'Anthropic dont ce pare-feu est dérivé, les requêtes DNS restent autorisées vers tout serveur.
+- **À ne jamais commiter** : `params.json` (paramètres et clé privée pour `zabbix_js`) et le dossier `cisco-docs/` (pages Cisco du catalogue). Les deux sont dans le `.gitignore`.
 
 
 Le fichier `zbx_intersight_templates_7.0.yaml` contient 4 templates :

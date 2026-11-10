@@ -25,6 +25,14 @@ python3 tools/check_metrics_against_doc.py <Supported_Metrices.md>
 - `src/collector.js` must stay **ES5** (Duktape). No `let`, `const`, arrow functions or template strings. CI checks this.
 - The **JSON contract** between the collector and the templates is documented at the top of `src/collector.js`. Renaming a field requires changing the matching JSONPath in `tools/generate_templates.py`.
 
+## Development environment
+
+- `.devcontainer/` is the sandbox the user works in (VS Code + Claude Code). Same tool versions as the CI: Node 20, Python 3.12, PyYAML 6.0.3.
+- Outbound firewall `.devcontainer/intersight-init-firewall.sh`, fail-closed: only api.anthropic.com, GitHub ranges and the VS Code marketplace. The Intersight appliance is reachable (HTTPS) only if `INTERSIGHT_APPLIANCE_HOST` is set. Expect any other network access to fail; the tests never need the network.
+- `sudo` is limited to the firewall script: nothing can be installed at runtime. Add tools to the `Dockerfile` instead.
+- Run `tools/ci.sh` before every commit: same steps as the GitHub CI, including "committed template == generated template".
+- Never commit `params.json` (zabbix_js parameters, contains the private key) or `cisco-docs/` (Cisco pages used to rebuild the catalog).
+
 ## Rule: no inferred metric names (user requirement)
 
 - The user explicitly asked: **do not infer**. Every Druid field must exist in `docs/intersight_metrics.json`, the catalog extracted from the Intersight "Supported Metrics" pages (`tools/build_metrics_catalog.py <folder of pages>`). `tests/documented_fields.test.js` fails on any other field or dataSource. The pages themselves (Cisco content) are not committed; the user provided them as Markdown.
