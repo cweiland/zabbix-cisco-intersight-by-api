@@ -15,6 +15,7 @@
 #      a usable ip6tables, IPv6 must be disabled in the container, otherwise the script stops.
 #    - Host exception limited to the default gateway itself, not its /24 (which also holds
 #      other containers).
+#    - DNS (UDP 53) only towards the resolvers of /etc/resolv.conf, not to any host.
 #    - No "outbound SSH to any host" rule: GitHub stays reachable (SSH included) through
 #      its published IP ranges.
 #    - Only what this project needs: Claude Code (API and sign-in), GitHub, VS Code
@@ -35,6 +36,8 @@ IFS=$'\n\t'
 # Environment of the container's first process, and the kernel switch for IPv6.
 CONTAINER_ENVIRON=/proc/1/environ
 IPV6_DISABLED_FLAG=/proc/sys/net/ipv6/conf/all/disable_ipv6
+# DNS resolvers of the container (written by Docker, read-only for "vscode").
+RESOLV_CONF=/etc/resolv.conf
 
 ALLOWED_DOMAINS=(
     "api.anthropic.com"               # Claude Code: API requests
@@ -119,7 +122,21 @@ iptables -A INPUT -i lo -j ACCEPT
 iptables -A OUTPUT -o lo -j ACCEPT
 iptables -A INPUT -m state --state ESTABLISHED,RELATED -j ACCEPT
 iptables -A OUTPUT -m state --state ESTABLISHED,RELATED -j ACCEPT
-iptables -A OUTPUT -p udp --dport 53 -j ACCEPT
+
+# DNS only towards the container's resolvers (written by Docker), not to any host: an open
+# UDP port 53 would carry any data to any server. Docker's internal DNS (127.0.0.11) is on
+# the loopback, already allowed. IPv6 resolvers are ignored (IPv6 is blocked above).
+dns_servers=$(awk '$1 == "nameserver" {print $2}' "$RESOLV_CONF" || true)
+dns_rule_count=0
+while read -r dns_server; do
+    if is_ipv4 "$dns_server"; then
+        iptables -A OUTPUT -p udp -d "$dns_server" --dport 53 -j ACCEPT
+        dns_rule_count=$((dns_rule_count + 1))
+    fi
+done <<< "$dns_servers"
+if [ "$dns_rule_count" -eq 0 ]; then
+    echo "ERROR: no IPv4 nameserver in $RESOLV_CONF"; exit 1
+fi
 
 # Default gateway only (Docker / VS Code plumbing), not the rest of its subnet.
 HOST_IP=$(ip route | awk '/^default/ {print $3; exit}')
@@ -137,12 +154,18 @@ github_meta=$(curl -s --connect-timeout 10 https://api.github.com/meta || true)
 if ! echo "$github_meta" | jq -e '.web and .api and .git' >/dev/null; then
     echo "ERROR: unexpected answer from https://api.github.com/meta"; exit 1
 fi
+# Computed in a variable, not in "< <(...)": the exit status of a process substitution is
+# ignored, so a failing jq or aggregate would leave an empty list without stopping the script.
+github_cidrs=$(echo "$github_meta" | jq -r '(.web + .api + .git)[]' | grep -v ':' | aggregate -q)
+if [ -z "$github_cidrs" ]; then
+    echo "ERROR: no IPv4 range in https://api.github.com/meta"; exit 1
+fi
 while read -r cidr; do
     if [[ ! "$cidr" =~ ^[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}/[0-9]{1,2}$ ]]; then
         echo "ERROR: invalid CIDR from GitHub meta: $cidr"; exit 1
     fi
     ipset add -exist allowed-domains "$cidr"
-done < <(echo "$github_meta" | jq -r '(.web + .api + .git)[]' | grep -v ':' | aggregate -q)
+done <<< "$github_cidrs"
 echo "Allowed GitHub ranges"
 
 for domain in "${ALLOWED_DOMAINS[@]}"; do
@@ -151,7 +174,8 @@ done
 
 # Intersight appliance (optional): HTTPS only.
 if [ -n "$APPLIANCE_HOST" ]; then
-    if [[ ! "$APPLIANCE_HOST" =~ ^[A-Za-z0-9.-]+$ ]]; then
+    # First character alphanumeric: a value starting with "-" would be read by dig as an option.
+    if [[ ! "$APPLIANCE_HOST" =~ ^[A-Za-z0-9][A-Za-z0-9.-]*$ ]]; then
         echo "WARNING: ignored invalid appliance host: $APPLIANCE_HOST"
     elif is_ipv4 "$APPLIANCE_HOST"; then
         iptables -I OUTPUT -p tcp -d "$APPLIANCE_HOST" --dport 443 -j ACCEPT

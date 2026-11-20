@@ -47,12 +47,15 @@ exit 0
 // Runs a copy of the script whose /proc paths point to test files.
 //   environ        variables of the container's PID 1 (where the appliance is read)
 //   ipv6Disabled   content of /proc/sys/net/ipv6/conf/all/disable_ipv6
+//   resolvConf     content of /etc/resolv.conf (default: one IPv4 resolver)
 function runFirewall(options) {
   options = options || {};
   const runDir = fs.mkdtempSync(path.join(workDir, 'run-'));
   const environFile = path.join(runDir, 'environ');
   const ipv6File = path.join(runDir, 'disable_ipv6');
   const logFile = path.join(runDir, 'calls.log');
+  const resolvFile = path.join(runDir, 'resolv.conf');
+  fs.writeFileSync(resolvFile, options.resolvConf !== undefined ? options.resolvConf : 'nameserver 192.168.65.7\n');
   fs.writeFileSync(environFile, Object.keys(options.environ || {}).map(function (key) {
     return key + '=' + options.environ[key] + '\0';
   }).join(''));
@@ -61,7 +64,8 @@ function runFirewall(options) {
   const scriptCopy = path.join(runDir, 'firewall.sh');
   fs.writeFileSync(scriptCopy, scriptSource
     .split('/proc/1/environ').join(environFile)
-    .split('/proc/sys/net/ipv6/conf/all/disable_ipv6').join(ipv6File));
+    .split('/proc/sys/net/ipv6/conf/all/disable_ipv6').join(ipv6File)
+    .split('/etc/resolv.conf').join(resolvFile));
   const result = spawnSync('bash', [scriptCopy].concat(options.args || []), {
     encoding: 'utf8',
     env: Object.assign({}, process.env, options.env || {}, {
@@ -149,6 +153,27 @@ const requiredDnsFailure = runFirewall({ env: { FW_DIG_FAIL: 'api.anthropic.com'
 check('required domain DNS failure stops with a clear error', requiredDnsFailure.status !== 0 &&
   /cannot resolve api.anthropic.com/.test(requiredDnsFailure.output), requiredDnsFailure.output);
 check('GitHub IPv6 ranges are not added to the IPv4 set', nominal.calls.filter(function (c) { return /2a0a:/.test(c) && /^ipset add/.test(c); }).length === 0);
+
+// ---------------------------------------------------------------- security pass before the next review
+// DNS: UDP 53 only towards the container's resolvers; an open port 53 would carry any data anywhere.
+check('DNS allowed only towards the resolvers of /etc/resolv.conf',
+  nominal.calls.indexOf('iptables -A OUTPUT -p udp -d 192.168.65.7 --dport 53 -j ACCEPT') !== -1 &&
+  nominal.calls.filter(function (c) { return /--dport 53/.test(c) && !/ -d /.test(c); }).length === 0,
+  nominal.calls.filter(function (c) { return /--dport 53/.test(c); }).join(' | '));
+const ipv6OnlyResolver = runFirewall({ resolvConf: 'nameserver fd00::53\n' });
+check('no IPv4 resolver: stop with a clear error', ipv6OnlyResolver.status !== 0 &&
+  /no IPv4 nameserver/.test(ipv6OnlyResolver.output), ipv6OnlyResolver.output);
+// A value starting with "-" would be read by dig as an option.
+const optionAppliance = runFirewall({ environ: { INTERSIGHT_APPLIANCE_HOST: '-b192.0.2.1' } });
+check('appliance host starting with "-" ignored (never passed to dig)', optionAppliance.status === 0 &&
+  /WARNING: ignored invalid appliance host/.test(optionAppliance.output) &&
+  firstIndexMatching(optionAppliance.calls, /^dig .*-b192/) === -1 &&
+  firstIndexMatching(optionAppliance.calls, httpsRule) === -1, optionAppliance.output);
+// The exit status of a process substitution is ignored by bash: a failing aggregate used to
+// end with an empty GitHub list and "Firewall ready".
+const aggregateFailure = runFirewall({ env: { FW_FAIL_ON: 'aggregate -q' } });
+check('a failure while computing the GitHub ranges stops the script', aggregateFailure.status !== 0 &&
+  !/Firewall ready/.test(aggregateFailure.output), aggregateFailure.output);
 
 // ---------------------------------------------------------------- container settings
 const dockerfile = fs.readFileSync(path.join(repoRoot, '.devcontainer/Dockerfile'), 'utf8');
