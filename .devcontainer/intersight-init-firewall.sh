@@ -60,7 +60,8 @@ fi
 # IPv4 addresses of a domain, one per line; empty when it does not resolve (a dig failure
 # must not stop the script by itself: callers decide whether an empty answer is fatal).
 resolve_ipv4() {
-    dig +noall +answer A "$1" | awk '$4 == "A" {print $5}' || true
+    # Bounded: 2 tries of 2 s (dig defaults: 3 tries of 5 s), see the entrypoint time limit.
+    dig +noall +answer +time=2 +tries=2 A "$1" | awk '$4 == "A" {print $5}' || true
 }
 
 is_ipv4() {
@@ -163,7 +164,7 @@ iptables -A OUTPUT -m set --match-set allowed-domains dst -j ACCEPT
 
 # GitHub: published ranges (web, api, git). api.github.com is allowed first to fetch them.
 allow_domain "api.github.com" || { echo "ERROR: cannot resolve api.github.com"; exit 1; }
-github_meta=$(curl -s --connect-timeout 10 https://api.github.com/meta || true)
+github_meta=$(curl -s --connect-timeout 5 --max-time 10 https://api.github.com/meta || true)
 if ! echo "$github_meta" | jq -e '.web and .api and .git' >/dev/null; then
     echo "ERROR: unexpected answer from https://api.github.com/meta"; exit 1
 fi
@@ -213,10 +214,10 @@ fi
 iptables -A OUTPUT -j REJECT --reject-with icmp-admin-prohibited
 
 # --- 4. Verification
-if curl -s --connect-timeout 5 https://example.com >/dev/null 2>&1; then
+if curl -s --connect-timeout 5 --max-time 5 https://example.com >/dev/null 2>&1; then
     echo "ERROR: firewall check failed: https://example.com is reachable"; exit 1
 fi
-if ! curl -s --connect-timeout 5 https://api.github.com/zen >/dev/null 2>&1; then
+if ! curl -s --connect-timeout 5 --max-time 5 https://api.github.com/zen >/dev/null 2>&1; then
     echo "ERROR: firewall check failed: https://api.github.com is not reachable"; exit 1
 fi
 echo "Firewall ready: example.com blocked, GitHub reachable"

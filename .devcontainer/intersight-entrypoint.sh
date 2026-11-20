@@ -26,7 +26,14 @@ export PATH=/usr/sbin:/usr/bin:/sbin:/bin
 FIREWALL_READY_FLAG=/run/intersight-firewall.ready
 rm -f "$FIREWALL_READY_FLAG"
 
-/usr/local/bin/intersight-init-firewall.sh
+# Whole firewall run bounded, forced termination included (TERM, then KILL 5 s later):
+# 45 + 5 = 50 s, below the 60 s of intersight-wait-for-firewall.sh. A stalled DNS or HTTPS
+# call therefore ends the container (fail-closed) instead of outliving the wait, which would
+# let VS Code connect while the firewall is still incomplete.
+FIREWALL_TIME_LIMIT_SECONDS=45
+FIREWALL_KILL_AFTER_SECONDS=5
+timeout --kill-after="$FIREWALL_KILL_AFTER_SECONDS" "$FIREWALL_TIME_LIMIT_SECONDS" \
+    /usr/local/bin/intersight-init-firewall.sh
 
 awk '{print $22}' /proc/1/stat > "$FIREWALL_READY_FLAG.tmp"
 mv "$FIREWALL_READY_FLAG.tmp" "$FIREWALL_READY_FLAG"

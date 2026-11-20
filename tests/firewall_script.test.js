@@ -162,7 +162,7 @@ check('ip6tables unusable, kernel without IPv6 (no /proc/sys/net/ipv6/conf): con
 // code.claude.com/docs/en/network-config: OAuth token exchange, refresh and revocation go to
 // platform.claude.com (claude.ai accounts included); claude.ai for claude.ai account authentication.
 ['api.anthropic.com', 'platform.claude.com', 'claude.ai'].forEach(function (domain) {
-  check('Claude Code host allowed: ' + domain, nominal.calls.indexOf('dig +noall +answer A ' + domain) !== -1 &&
+  check('Claude Code host allowed: ' + domain, nominal.calls.indexOf('dig +noall +answer +time=2 +tries=2 A ' + domain) !== -1 &&
     nominal.output.indexOf('Allowed ' + domain + '\n') !== -1);
 });
 
@@ -287,6 +287,31 @@ if (fs.existsSync(entrypointPath)) {
     !/SUBSTITUTE_RAN/.test(entryOk.output), entryOk.output);
   check('firewall script resets PATH to system directories itself',
     /^export PATH=\/usr\/sbin:\/usr\/bin:\/sbin:\/bin$/m.test(scriptSource));
+  // Review of 0e0663c: the firewall run must end (killed if needed) before the 60 s wait.
+  function secondsIn(source, name) { const m = new RegExp('^' + name + '=(\\d+)\\b', 'm').exec(source); return m ? Number(m[1]) : NaN; }
+  const timeLimit = secondsIn(entrypointSource, 'FIREWALL_TIME_LIMIT_SECONDS');
+  const killAfter = secondsIn(entrypointSource, 'FIREWALL_KILL_AFTER_SECONDS');
+  const waitSeconds = secondsIn(waitSource, 'ATTEMPTS') * 0.5;
+  check('firewall time limit + forced kill (' + timeLimit + ' + ' + killAfter + ' s) below the wait (' + waitSeconds + ' s)',
+    timeLimit + killAfter < waitSeconds && /timeout --kill-after="\$FIREWALL_KILL_AFTER_SECONDS" "\$FIREWALL_TIME_LIMIT_SECONDS"/.test(entrypointSource));
+  check('every curl call of the firewall has --max-time',
+    (scriptSource.match(/curl /g) || []).length === (scriptSource.match(/curl [^\n]*--max-time \d+/g) || []).length);
+  // A stalled firewall that ignores SIGTERM: the entrypoint must still end, without marker, before the CMD.
+  const stalledDir = fs.mkdtempSync(path.join(workDir, 'stalled-'));
+  const stalledFirewall = path.join(stalledDir, 'firewall.sh');
+  fs.writeFileSync(stalledFirewall, '#!/bin/bash\ntrap "" TERM\nsleep 30\n', { mode: 0o755 });
+  const stalledMarker = path.join(stalledDir, 'firewall.ready');
+  const stalledEntry = path.join(stalledDir, 'entrypoint.sh');
+  fs.writeFileSync(stalledEntry, entrypointSource.split('/usr/local/bin/intersight-init-firewall.sh').join(stalledFirewall)
+    .split('/run/intersight-firewall.ready').join(stalledMarker).split('/proc/1/stat').join(fakeStat)
+    .replace(/^FIREWALL_TIME_LIMIT_SECONDS=\d+$/m, 'FIREWALL_TIME_LIMIT_SECONDS=1')
+    .replace(/^FIREWALL_KILL_AFTER_SECONDS=\d+$/m, 'FIREWALL_KILL_AFTER_SECONDS=1'));
+  const stalledStart = Date.now();
+  const stalled = spawnSync('bash', [stalledEntry, 'sh', '-c', 'echo CMD_RAN'], { encoding: 'utf8', timeout: 20000 });
+  const stalledSeconds = (Date.now() - stalledStart) / 1000;
+  check('entrypoint: a stalled firewall (SIGTERM ignored) is killed, the container ends without marker or CMD',
+    stalled.status !== 0 && stalledSeconds < 5 && !fs.existsSync(stalledMarker) && !/CMD_RAN/.test(stalled.stdout || ''),
+    'status=' + stalled.status + ' after ' + stalledSeconds + ' s');
   const entryKo = runEntrypoint(1);
   check('entrypoint: no readiness marker when the firewall fails', entryKo.marker === null, entryKo.output);
   check('entrypoint: a failing firewall stops it before the CMD (container ends)', entryKo.status !== 0 &&
