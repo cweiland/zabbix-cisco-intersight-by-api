@@ -16,11 +16,11 @@
 #    - No exception for the host or the default gateway: Docker publishes the ports of other
 #      containers on the gateway address too. VS Code reaches the container through
 #      "docker exec", not through the network.
-#    - DNS (UDP 53) only towards the resolvers of /etc/resolv.conf, not to any host.
+#    - DNS (port 53, UDP and TCP) only towards the resolvers of /etc/resolv.conf, not to any host.
 #    - No "outbound SSH to any host" rule: GitHub stays reachable (SSH included) through
 #      its published IP ranges.
-#    - Only what this project needs: Claude Code (API and sign-in), GitHub, VS Code
-#      extensions. No npm (the project has no npm dependency), no telemetry endpoints
+#    - Only what this project needs: Claude Code (API and sign-in) and GitHub. No VS Code
+#      host (server and extensions come from the host), no npm (the project has no npm dependency), no telemetry endpoints
 #      (disabled by CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC in devcontainer.json).
 #      Claude Code hosts: "Network access requirements" in
 #      https://code.claude.com/docs/en/network-config
@@ -46,10 +46,11 @@ ALLOWED_DOMAINS=(
     "api.anthropic.com"               # Claude Code: API requests
     "platform.claude.com"             # Claude Code: OAuth token exchange, refresh, revocation
     "claude.ai"                       # Claude Code: claude.ai account authentication
-    "marketplace.visualstudio.com"    # VS Code extensions
-    "vscode.blob.core.windows.net"
-    "update.code.visualstudio.com"
 )
+# No VS Code host: the dev container CLI copies the VS Code server from the host, and VS Code
+# downloads the extensions on the host when the container cannot reach the Marketplace
+# ("downloadExtensionsLocally" in the Dev Containers log), so allowing these shared CDN
+# front ends would only widen the egress.
 
 if [ "$#" -ne 0 ]; then
     echo "ERROR: this script takes no argument (the appliance comes from the container environment)"
@@ -139,13 +140,16 @@ iptables -A INPUT -m state --state ESTABLISHED,RELATED -j ACCEPT
 iptables -A OUTPUT -m state --state ESTABLISHED,RELATED -j ACCEPT
 
 # DNS only towards the container's resolvers (written by Docker), not to any host: an open
-# UDP port 53 would carry any data to any server. Docker's internal DNS (127.0.0.11) is on
+# port 53 would carry any data to any server. Docker's internal DNS (127.0.0.11) is on
 # the loopback, already allowed. IPv6 resolvers are ignored (IPv6 is blocked above).
 dns_servers=$(awk '$1 == "nameserver" {print $2}' "$RESOLV_CONF" || true)
 dns_rule_count=0
 while read -r dns_server; do
     if is_ipv4 "$dns_server"; then
         iptables -A OUTPUT -p udp -d "$dns_server" --dport 53 -j ACCEPT
+        # TCP too, towards the same resolver: answers too large for UDP are retried over TCP
+        # (RFC 7766: DNS over TCP is required of every implementation).
+        iptables -A OUTPUT -p tcp -d "$dns_server" --dport 53 -j ACCEPT
         dns_rule_count=$((dns_rule_count + 1))
     fi
 done <<< "$dns_servers"

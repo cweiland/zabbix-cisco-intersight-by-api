@@ -184,8 +184,9 @@ check('GitHub IPv6 ranges are not added to the IPv4 set', nominal.calls.filter(f
 
 // ---------------------------------------------------------------- security pass before the next review
 // DNS: UDP 53 only towards the container's resolvers; an open port 53 would carry any data anywhere.
-check('DNS allowed only towards the resolvers of /etc/resolv.conf',
+check('DNS allowed only towards the resolvers of /etc/resolv.conf (UDP and TCP)',
   nominal.calls.indexOf('iptables -A OUTPUT -p udp -d 192.168.65.7 --dport 53 -j ACCEPT') !== -1 &&
+  nominal.calls.indexOf('iptables -A OUTPUT -p tcp -d 192.168.65.7 --dport 53 -j ACCEPT') !== -1 &&
   nominal.calls.filter(function (c) { return /--dport 53/.test(c) && !/ -d /.test(c); }).length === 0,
   nominal.calls.filter(function (c) { return /--dport 53/.test(c); }).join(' | '));
 const ipv6OnlyResolver = runFirewall({ resolvConf: 'nameserver fd00::53\n' });
@@ -202,6 +203,12 @@ check('appliance host starting with "-" ignored (never passed to dig)', optionAp
 const aggregateFailure = runFirewall({ env: { FW_FAIL_ON: 'aggregate -q' } });
 check('a failure while computing the GitHub ranges stops the script', aggregateFailure.status !== 0 &&
   !/Firewall ready/.test(aggregateFailure.output), aggregateFailure.output);
+
+// Review of d70fd0a: shared CDN front ends widen the egress; the container never used them
+// (VS Code server copied from the host, extensions downloaded on the host).
+['marketplace.visualstudio.com', 'vscode.blob.core.windows.net', 'update.code.visualstudio.com'].forEach(function (domain) {
+  check('VS Code host not allowed: ' + domain, firstIndexMatching(nominal.calls, new RegExp(domain.replace(/\./g, '\\.'))) === -1);
+});
 
 // ---------------------------------------------------------------- container settings
 const dockerfile = fs.readFileSync(path.join(repoRoot, '.devcontainer/Dockerfile'), 'utf8');
@@ -255,7 +262,9 @@ if (fs.existsSync(entrypointPath)) {
 // Review of 674d224: files that the HOST executes must not be writable from the container
 // (initializeCommand in devcontainer.json, git hooks and git config used by git on the host,
 // VS Code workspace settings and tasks when the folder is reopened locally).
-['.devcontainer', '.git/hooks', '.git/config', '.vscode'].forEach(function (relative) {
+// .git as a whole: a writable .git/commondir alone redirects git to another config and other
+// hooks (checked with git 2.43), so protecting only .git/config and .git/hooks is not enough.
+['.devcontainer', '.git', '.vscode'].forEach(function (relative) {
   const target = '${containerWorkspaceFolder}/' + relative;
   check('read-only in the container: ' + relative, (devcontainer.mounts || []).some(function (m) {
     return m.indexOf('source=${localWorkspaceFolder}/' + relative + ',') === 0 &&
