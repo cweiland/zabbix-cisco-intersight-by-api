@@ -13,6 +13,12 @@
 # =====================================================================================
 set -euo pipefail
 
+# Root must never run a command found in a directory that "vscode" can write. The container
+# PATH starts with /usr/local/share/nvm/current/bin (devcontainers Node feature), a directory
+# of the "nvm" group, which "vscode" belongs to: a fake iptables, curl or sleep placed there
+# would run as root at the next start. System directories only (not /usr/local).
+export PATH=/usr/sbin:/usr/bin:/sbin:/bin
+
 /usr/local/bin/intersight-init-firewall.sh
 
 # Run the CMD (sleep infinity) as a child and stop on SIGTERM right away, as the dev

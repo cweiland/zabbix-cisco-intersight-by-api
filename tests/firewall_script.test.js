@@ -65,7 +65,9 @@ function runFirewall(options) {
   fs.writeFileSync(scriptCopy, scriptSource
     .split('/proc/1/environ').join(environFile)
     .split('/proc/sys/net/ipv6/conf/all/disable_ipv6').join(ipv6File)
-    .split('/etc/resolv.conf').join(resolvFile));
+    .split('/etc/resolv.conf').join(resolvFile)
+    // The script resets PATH to system directories: put the stubs in front of them.
+    .split('export PATH=/usr/sbin:/usr/bin:/sbin:/bin').join('export PATH=' + stubDir + ':/usr/sbin:/usr/bin:/sbin:/bin'));
   const result = spawnSync('bash', [scriptCopy].concat(options.args || []), {
     encoding: 'utf8',
     env: Object.assign({}, process.env, options.env || {}, {
@@ -192,18 +194,32 @@ check('postStartCommand no longer runs the firewall (nor sudo)',
 const entrypointPath = path.join(repoRoot, '.devcontainer/intersight-entrypoint.sh');
 if (fs.existsSync(entrypointPath)) {
   const entrypointSource = fs.readFileSync(entrypointPath, 'utf8');
+  // A directory writable by "vscode" first in PATH (as /usr/local/share/nvm/current/bin with
+  // the devcontainers Node feature), holding fake commands that must never run as root.
+  const writableDir = path.join(workDir, 'writable-by-vscode');
+  fs.mkdirSync(writableDir);
+  ['sh', 'sleep', 'iptables', 'curl'].forEach(function (name) {
+    fs.writeFileSync(path.join(writableDir, name), '#!/bin/sh\necho SUBSTITUTE_RAN ' + name + '\n', { mode: 0o755 });
+  });
   function runEntrypoint(firewallExitCode) {
     const runDir = fs.mkdtempSync(path.join(workDir, 'entry-'));
     const fakeFirewall = path.join(runDir, 'firewall.sh');
-    fs.writeFileSync(fakeFirewall, '#!/usr/bin/env bash\necho FIREWALL_RAN "$#"\nexit ' + firewallExitCode + '\n', { mode: 0o755 });
+    fs.writeFileSync(fakeFirewall, '#!/bin/bash\necho FIREWALL_RAN "$#" "PATH=$PATH"\nexit ' + firewallExitCode + '\n', { mode: 0o755 });
     const entryCopy = path.join(runDir, 'entrypoint.sh');
     fs.writeFileSync(entryCopy, entrypointSource.split('/usr/local/bin/intersight-init-firewall.sh').join(fakeFirewall));
-    const result = spawnSync('bash', [entryCopy, 'sh', '-c', 'echo CMD_RAN'], { encoding: 'utf8' });
+    const result = spawnSync('bash', [entryCopy, 'sh', '-c', 'echo CMD_RAN'], { encoding: 'utf8',
+      env: Object.assign({}, process.env, { PATH: writableDir + ':' + process.env.PATH }) });
     return { status: result.status, output: (result.stdout || '') + (result.stderr || '') };
   }
   const entryOk = runEntrypoint(0);
   check('entrypoint: firewall run without argument, then the CMD', entryOk.status === 0 &&
     /FIREWALL_RAN 0/.test(entryOk.output) && /CMD_RAN/.test(entryOk.output), entryOk.output);
+  // Review of 32148f8: a PATH directory writable by "vscode" must not give root commands.
+  check('entrypoint: PATH reset to system directories before the firewall and the CMD',
+    /FIREWALL_RAN 0 PATH=\/usr\/sbin:\/usr\/bin:\/sbin:\/bin\n/.test(entryOk.output) &&
+    !/SUBSTITUTE_RAN/.test(entryOk.output), entryOk.output);
+  check('firewall script resets PATH to system directories itself',
+    /^export PATH=\/usr\/sbin:\/usr\/bin:\/sbin:\/bin$/m.test(scriptSource));
   const entryKo = runEntrypoint(1);
   check('entrypoint: a failing firewall stops it before the CMD (container ends)', entryKo.status !== 0 &&
     !/CMD_RAN/.test(entryKo.output), entryKo.output);

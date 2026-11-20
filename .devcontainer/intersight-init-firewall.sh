@@ -32,6 +32,8 @@
 # =====================================================================================
 set -euo pipefail
 IFS=$'\n\t'
+# Commands only from system directories, which "vscode" cannot write (see the entrypoint).
+export PATH=/usr/sbin:/usr/bin:/sbin:/bin
 
 # Environment of the container's first process, and the kernel switch for IPv6.
 CONTAINER_ENVIRON=/proc/1/environ
