@@ -105,3 +105,11 @@ python3 tools/check_metrics_against_doc.py <Supported_Metrices.md>
 - Mocked Intersight responses must follow the Cisco support matrices (e.g. no `hw.host` row for IMM chassis).
 - Every request signature is verified cryptographically in the mocks.
 - New behaviour gets a PASS/FAIL check that sets `process.exitCode = 1` on failure.
+
+## Claude Code permissions (`.claude/settings.json`)
+
+- Git is read-only for Claude (user decision): `git commit` and `git push` are denied. Claude edits files; the user reviews, commits and pushes from the host. In the dev container the whole `.git` is mounted read-only anyway (a writable `.git` lets the container run commands through git on the host). Read-only commands such as `git status`, `git diff` and `git log` need no rule.
+- **Tests, `tools/ci.sh`, the generator and the validator are NOT pre-approved, on purpose** (user decision): they run scripts Claude can edit (`run_all.js` runs every `*.test.js`), so an allow rule would amount to running arbitrary code without asking. Expect a prompt each time; do not try to get around it.
+- Do not work around the git rules (`git -C . commit`, `git -c ... push` and similar forms are not matched by the rules, but are just as off-limits).
+- Reading `params.json`, `*.pem`, `*.key` and `.env*` is denied: they hold credentials. Do not read them by other means either (scripts, `node -e`, `python -c`).
+- Personal approvals go to `.claude/settings.local.json`, which is git-ignored. Do not add "don't ask again" approvals for script-running commands there either.
