@@ -28,8 +28,9 @@ python3 tools/check_metrics_against_doc.py <Supported_Metrices.md>
 ## Development environment
 
 - `.devcontainer/` is the sandbox the user works in (VS Code + Claude Code). Same tool versions as the CI: Node 20, Python 3.12, PyYAML 6.0.3.
-- Outbound firewall `.devcontainer/intersight-init-firewall.sh`, fail-closed: only api.anthropic.com, GitHub ranges and the VS Code marketplace. The Intersight appliance is reachable (HTTPS) only if `INTERSIGHT_APPLIANCE_HOST` is set. Expect any other network access to fail; the tests never need the network.
-- `sudo` is limited to the firewall script: nothing can be installed at runtime. Add tools to the `Dockerfile` instead.
+- Outbound firewall `.devcontainer/intersight-init-firewall.sh`, fail-closed (DROP policies set before any flush), IPv4 and IPv6: only api.anthropic.com, GitHub ranges, the VS Code marketplace and the default gateway (not its subnet). The Intersight appliance is reachable (HTTPS) only if `INTERSIGHT_APPLIANCE_HOST` is set when the container is created; the script reads it from PID 1's environment, never from its caller. Expect any other network access to fail; the tests never need the network.
+- `sudo` is limited to the firewall script, without arguments: nothing can be installed at runtime and no destination can be added. Add tools to the `Dockerfile` instead.
+- `tests/firewall_script.test.js` runs the firewall with stub commands (order of rules, arguments refused, IPv6, gateway only, DNS failures). It came from the Copilot review of PR #1; keep it passing when changing the script.
 - Run `tools/ci.sh` before every commit: same steps as the GitHub CI, including "committed template == generated template".
 - Never commit `params.json` (zabbix_js parameters, contains the private key) or `cisco-docs/` (Cisco pages used to rebuild the catalog).
 

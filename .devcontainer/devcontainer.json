@@ -17,7 +17,7 @@
     "INTERSIGHT_APPLIANCE_HOST": "${localEnv:INTERSIGHT_APPLIANCE_HOST}"
   },
 
-  "postStartCommand": "sudo /usr/local/bin/intersight-init-firewall.sh \"$INTERSIGHT_APPLIANCE_HOST\" && node tests/run_all.js && python3 tools/validate_template.py",
+  "postStartCommand": "sudo /usr/local/bin/intersight-init-firewall.sh && node tests/run_all.js && python3 tools/validate_template.py",
   "waitFor": "postStartCommand",
 
   "customizations": {
