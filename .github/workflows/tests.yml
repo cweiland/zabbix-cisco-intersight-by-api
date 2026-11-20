@@ -29,7 +29,7 @@ jobs:
 
       - name: Template is up to date with src/collector.js
         run: |
-          pip install pyyaml==6.0.3
+          pip install --require-hashes -r .devcontainer/requirements-dev.txt
           python3 tools/generate_templates.py
           git diff --exit-code templates/
 

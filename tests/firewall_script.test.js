@@ -337,6 +337,16 @@ check('.vscode exists in the repository (a bind mount needs an existing source)'
 // (Anthropic's reference devcontainer.json sets it to the volume path).
 check('CLAUDE_CONFIG_DIR points to the Claude Code volume',
   (devcontainer.containerEnv || {}).CLAUDE_CONFIG_DIR === '/home/vscode/.claude');
+// Supply chain and privileges (anticipated review points).
+check('base image pinned by digest', /^FROM mcr\.microsoft\.com\/devcontainers\/base:ubuntu-24\.04@sha256:[0-9a-f]{64}$/m.test(dockerfile));
+check('Python dependencies installed with --require-hashes (dev container and CI)',
+  /pip install --no-cache-dir --require-hashes -r \/tmp\/requirements-dev\.txt/.test(dockerfile) &&
+  /pip install --require-hashes -r \.devcontainer\/requirements-dev\.txt/.test(fs.readFileSync(path.join(repoRoot, '.github/workflows/tests.yml'), 'utf8')));
+check('every requirement of requirements-dev.txt has a sha256 hash',
+  fs.readFileSync(path.join(repoRoot, '.devcontainer/requirements-dev.txt'), 'utf8').split(/\n(?! )/).filter(function (l) { return /^[a-z]/i.test(l); })
+    .every(function (l) { return /==[\d.]+/.test(l) && /--hash=sha256:[0-9a-f]{64}/.test(l); }));
+check('no-new-privileges: no process can gain privileges (setuid, file capabilities)',
+  (devcontainer.runArgs || []).indexOf('--security-opt=no-new-privileges') !== -1);
 const claudeMount = (devcontainer.mounts || []).filter(function (m) { return /target=\/home\/vscode\/\.claude/.test(m); });
 check('Claude Code volume mount point created and owned by vscode in the image', claudeMount.length === 1 &&
   /mkdir -p \/home\/vscode\/\.claude[^\n]*chown vscode:vscode \/home\/vscode\/\.claude/.test(dockerfile));

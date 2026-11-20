@@ -2,7 +2,10 @@
 # Same tool versions as the GitHub CI (.github/workflows/tests.yml): Node 20 (devcontainer
 # feature), Python 3.12 (Ubuntu 24.04 default) and PyYAML 6.0.3, so that a local run and the CI
 # generate exactly the same template.
-FROM mcr.microsoft.com/devcontainers/base:ubuntu-24.04
+# Base image pinned by digest (the tag is kept for readability; Docker uses the digest): a
+# re-tagged or substituted image cannot enter the build. Digest of the image the user built and
+# validated (docker inspect, RepoDigests). To update: pull the tag, check, replace the digest.
+FROM mcr.microsoft.com/devcontainers/base:ubuntu-24.04@sha256:d94c97dd9cacf183d0a6fd12a8e87b526e9e928307674ae9c94139139c0c6eae
 
 # Tools needed by the outbound firewall (.devcontainer/intersight-init-firewall.sh).
 RUN apt-get update \
@@ -10,8 +13,12 @@ RUN apt-get update \
       python3 python3-venv iptables ipset iproute2 dnsutils jq aggregate curl \
  && rm -rf /var/lib/apt/lists/*
 
-# PyYAML pinned like the CI, in a virtualenv first in PATH (nothing installed with pip at runtime).
-RUN python3 -m venv /opt/venv && /opt/venv/bin/pip install --no-cache-dir pyyaml==6.0.3
+# PyYAML pinned like the CI, with its PyPI hashes, in a virtualenv first in PATH (nothing
+# installed with pip at runtime).
+COPY requirements-dev.txt /tmp/requirements-dev.txt
+RUN python3 -m venv /opt/venv \
+ && /opt/venv/bin/pip install --no-cache-dir --require-hashes -r /tmp/requirements-dev.txt \
+ && rm /tmp/requirements-dev.txt
 ENV PATH=/opt/venv/bin:$PATH
 
 # Firewall script and the ENTRYPOINT that runs it, as root, at every container start.
