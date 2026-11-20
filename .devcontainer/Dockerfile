@@ -19,7 +19,9 @@ ENV PATH=/opt/venv/bin:$PATH
 # /usr/local/bin/init-firewall.sh, can never overwrite them.
 COPY intersight-init-firewall.sh /usr/local/bin/intersight-init-firewall.sh
 COPY intersight-entrypoint.sh /usr/local/bin/intersight-entrypoint.sh
-RUN chmod 0755 /usr/local/bin/intersight-init-firewall.sh /usr/local/bin/intersight-entrypoint.sh
+COPY intersight-wait-for-firewall.sh /usr/local/bin/intersight-wait-for-firewall.sh
+RUN chmod 0755 /usr/local/bin/intersight-init-firewall.sh /usr/local/bin/intersight-entrypoint.sh \
+      /usr/local/bin/intersight-wait-for-firewall.sh
 
 # The base image gives the "vscode" user unrestricted passwordless sudo. Remove it: the
 # firewall runs from the ENTRYPOINT as root, so nothing running as "vscode" (Claude Code

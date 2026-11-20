@@ -223,7 +223,12 @@ check('overrideCommand is false (the image ENTRYPOINT runs)', devcontainer.overr
 check('image ENTRYPOINT is the firewall entrypoint, CMD keeps the container running',
   /ENTRYPOINT \["\/usr\/local\/bin\/intersight-entrypoint\.sh"\]/.test(dockerfile) && /CMD \["sleep", "infinity"\]/.test(dockerfile));
 check('postStartCommand no longer runs the firewall (nor sudo)',
-  !/firewall|sudo/.test(devcontainer.postStartCommand || ''), devcontainer.postStartCommand);
+  !/init-firewall|sudo/.test(devcontainer.postStartCommand || ''), devcontainer.postStartCommand);
+// Review of 2011562: the CLI does not wait for the ENTRYPOINT; workspace code waits for the marker.
+check('postStartCommand first waits for the firewall of this start',
+  /^\/usr\/local\/bin\/intersight-wait-for-firewall\.sh && /.test(devcontainer.postStartCommand || ''), devcontainer.postStartCommand);
+check('wait script installed in the image (root-owned copy)',
+  /COPY intersight-wait-for-firewall\.sh \/usr\/local\/bin\/intersight-wait-for-firewall\.sh/.test(dockerfile));
 const entrypointPath = path.join(repoRoot, '.devcontainer/intersight-entrypoint.sh');
 if (fs.existsSync(entrypointPath)) {
   const entrypointSource = fs.readFileSync(entrypointPath, 'utf8');
@@ -234,17 +239,46 @@ if (fs.existsSync(entrypointPath)) {
   ['sh', 'sleep', 'iptables', 'curl'].forEach(function (name) {
     fs.writeFileSync(path.join(writableDir, name), '#!/bin/sh\necho SUBSTITUTE_RAN ' + name + '\n', { mode: 0o755 });
   });
-  function runEntrypoint(firewallExitCode) {
+  // Readiness marker and /proc/1/stat replaced by test files (start time "4242" in field 22).
+  const fakeStat = path.join(workDir, 'pid1-stat');
+  fs.writeFileSync(fakeStat, '1 (intersight-entr) S 0 1 1 0 -1 4194560 0 0 0 0 0 0 0 0 20 0 1 0 4242 0 0\n');
+  function runEntrypoint(firewallExitCode, staleMarker) {
     const runDir = fs.mkdtempSync(path.join(workDir, 'entry-'));
+    const marker = path.join(runDir, 'firewall.ready');
+    if (staleMarker) { fs.writeFileSync(marker, staleMarker + '\n'); }
     const fakeFirewall = path.join(runDir, 'firewall.sh');
-    fs.writeFileSync(fakeFirewall, '#!/bin/bash\necho FIREWALL_RAN "$#" "PATH=$PATH"\nexit ' + firewallExitCode + '\n', { mode: 0o755 });
+    fs.writeFileSync(fakeFirewall, '#!/bin/bash\necho FIREWALL_RAN "$#" "PATH=$PATH"\n' +
+      '[ -e "' + marker + '" ] && echo MARKER_DURING_FIREWALL\nexit ' + firewallExitCode + '\n', { mode: 0o755 });
     const entryCopy = path.join(runDir, 'entrypoint.sh');
-    fs.writeFileSync(entryCopy, entrypointSource.split('/usr/local/bin/intersight-init-firewall.sh').join(fakeFirewall));
+    fs.writeFileSync(entryCopy, entrypointSource.split('/usr/local/bin/intersight-init-firewall.sh').join(fakeFirewall)
+      .split('/run/intersight-firewall.ready').join(marker).split('/proc/1/stat').join(fakeStat));
     const result = spawnSync('bash', [entryCopy, 'sh', '-c', 'echo CMD_RAN'], { encoding: 'utf8',
       env: Object.assign({}, process.env, { PATH: writableDir + ':' + process.env.PATH }) });
-    return { status: result.status, output: (result.stdout || '') + (result.stderr || '') };
+    return { status: result.status, output: (result.stdout || '') + (result.stderr || ''),
+      marker: fs.existsSync(marker) ? fs.readFileSync(marker, 'utf8').trim() : null, markerPath: marker };
   }
   const entryOk = runEntrypoint(0);
+  const entryStale = runEntrypoint(0, '1111');
+  check('entrypoint: readiness marker written after the firewall, with the PID 1 start time',
+    entryOk.marker === '4242' && !/MARKER_DURING_FIREWALL/.test(entryOk.output), entryOk.output + ' marker=' + entryOk.marker);
+  check('entrypoint: a marker from a previous start is removed before the firewall runs',
+    !/MARKER_DURING_FIREWALL/.test(entryStale.output) && entryStale.marker === '4242', entryStale.output);
+  const waitSource = fs.readFileSync(path.join(repoRoot, '.devcontainer/intersight-wait-for-firewall.sh'), 'utf8');
+  function runWait(markerContent, ownerUid) {
+    const runDir = fs.mkdtempSync(path.join(workDir, 'wait-'));
+    const marker = path.join(runDir, 'firewall.ready');
+    if (markerContent !== null) { fs.writeFileSync(marker, markerContent + '\n'); }
+    const waitCopy = path.join(runDir, 'wait.sh');
+    fs.writeFileSync(waitCopy, waitSource.split('/run/intersight-firewall.ready').join(marker)
+      .split('/proc/1/stat').join(fakeStat).split('FLAG_OWNER_UID=0').join('FLAG_OWNER_UID=' + ownerUid)
+      .split('ATTEMPTS=120').join('ATTEMPTS=2'));
+    return spawnSync('bash', [waitCopy], { encoding: 'utf8' });
+  }
+  const myUid = process.getuid();
+  check('wait script: valid marker of this start -> ready', runWait('4242', myUid).status === 0);
+  check('wait script: marker of a previous start -> error', runWait('1111', myUid).status !== 0);
+  check('wait script: no marker -> error after the timeout', runWait(null, myUid).status !== 0);
+  check('wait script: marker not owned by root (here: another uid) -> error', runWait('4242', myUid + 1).status !== 0);
   check('entrypoint: firewall run without argument, then the CMD', entryOk.status === 0 &&
     /FIREWALL_RAN 0/.test(entryOk.output) && /CMD_RAN/.test(entryOk.output), entryOk.output);
   // Review of 32148f8: a PATH directory writable by "vscode" must not give root commands.
@@ -254,6 +288,7 @@ if (fs.existsSync(entrypointPath)) {
   check('firewall script resets PATH to system directories itself',
     /^export PATH=\/usr\/sbin:\/usr\/bin:\/sbin:\/bin$/m.test(scriptSource));
   const entryKo = runEntrypoint(1);
+  check('entrypoint: no readiness marker when the firewall fails', entryKo.marker === null, entryKo.output);
   check('entrypoint: a failing firewall stops it before the CMD (container ends)', entryKo.status !== 0 &&
     !/CMD_RAN/.test(entryKo.output), entryKo.output);
 } else {

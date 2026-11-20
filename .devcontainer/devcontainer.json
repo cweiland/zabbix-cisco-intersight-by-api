@@ -22,7 +22,7 @@
   },
 
   "overrideCommand": false,
-  "postStartCommand": "node tests/run_all.js && python3 tools/validate_template.py",
+  "postStartCommand": "/usr/local/bin/intersight-wait-for-firewall.sh && node tests/run_all.js && python3 tools/validate_template.py",
   "waitFor": "postStartCommand",
 
   "customizations": {
