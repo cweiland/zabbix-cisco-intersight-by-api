@@ -10,14 +10,17 @@
 #      no argument (the sudoers rule forbids them too). The optional Intersight appliance is
 #      read from the environment of the container's PID 1, set at creation from
 #      devcontainer.json "containerEnv" and not writable by "vscode".
-#    - IPv6 is filtered too (ip6tables, loopback only): iptables alone covers IPv4.
+#    - IPv6 is filtered too (ip6tables, loopback only): iptables alone covers IPv4. Without
+#      a usable ip6tables, IPv6 must be disabled in the container, otherwise the script stops.
 #    - Host exception limited to the default gateway itself, not its /24 (which also holds
 #      other containers).
 #    - No "outbound SSH to any host" rule: GitHub stays reachable (SSH included) through
 #      its published IP ranges.
-#    - Only what this project needs: Anthropic API (Claude Code), GitHub, VS Code
+#    - Only what this project needs: Claude Code (API and sign-in), GitHub, VS Code
 #      extensions. No npm (the project has no npm dependency), no telemetry endpoints
 #      (disabled by CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC in devcontainer.json).
+#      Claude Code hosts: "Network access requirements" in
+#      https://code.claude.com/docs/en/network-config
 #    - Appliance (INTERSIGHT_APPLIANCE_HOST): HTTPS only, and a resolution failure is a
 #      warning, not a container start failure.
 #
@@ -33,7 +36,9 @@ CONTAINER_ENVIRON=/proc/1/environ
 IPV6_DISABLED_FLAG=/proc/sys/net/ipv6/conf/all/disable_ipv6
 
 ALLOWED_DOMAINS=(
-    "api.anthropic.com"               # Claude Code
+    "api.anthropic.com"               # Claude Code: API requests
+    "platform.claude.com"             # Claude Code: OAuth token exchange, refresh, revocation
+    "claude.ai"                       # Claude Code: claude.ai account authentication
     "marketplace.visualstudio.com"    # VS Code extensions
     "vscode.blob.core.windows.net"
     "update.code.visualstudio.com"
@@ -74,8 +79,8 @@ iptables -P INPUT DROP
 iptables -P FORWARD DROP
 iptables -P OUTPUT DROP
 
-# IPv6: same closing, loopback only. If ip6tables cannot be used, IPv6 must be disabled or
-# have no route, otherwise IPv6 traffic would bypass the IPv4 rules: stop.
+# IPv6: same closing, loopback only. If ip6tables cannot be used, IPv6 must be disabled,
+# otherwise IPv6 traffic would bypass the IPv4 rules: stop.
 if ip6tables -P OUTPUT DROP 2>/dev/null; then
     ip6tables -P INPUT DROP
     ip6tables -P FORWARD DROP
@@ -85,11 +90,12 @@ if ip6tables -P OUTPUT DROP 2>/dev/null; then
     ip6tables -A OUTPUT -o lo -j ACCEPT
     echo "IPv6 blocked (loopback only)"
 elif [ "$(cat "$IPV6_DISABLED_FLAG" 2>/dev/null || echo 1)" = "1" ]; then
+    # Flag set to 1, or absent (kernel without IPv6): no IPv6 traffic at all.
     echo "IPv6 disabled in the container"
-elif [ -z "$(ip -6 route show default 2>/dev/null || true)" ]; then
-    echo "IPv6 has no default route"
 else
-    echo "ERROR: ip6tables is unusable while IPv6 is enabled with a route: IPv6 would bypass the firewall"
+    # IPv6 enabled: even without a default route, link-local addresses (fe80::) and other
+    # directly connected networks stay reachable, so unfiltered IPv6 is never acceptable.
+    echo "ERROR: ip6tables is unusable while IPv6 is enabled: IPv6 would bypass the firewall"
     exit 1
 fi
 

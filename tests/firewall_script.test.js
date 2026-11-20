@@ -56,7 +56,7 @@ function runFirewall(options) {
   fs.writeFileSync(environFile, Object.keys(options.environ || {}).map(function (key) {
     return key + '=' + options.environ[key] + '\0';
   }).join(''));
-  fs.writeFileSync(ipv6File, (options.ipv6Disabled || '0') + '\n');
+  if (options.ipv6Disabled !== 'absent') { fs.writeFileSync(ipv6File, (options.ipv6Disabled || '0') + '\n'); }
   fs.writeFileSync(logFile, '');
   const scriptCopy = path.join(runDir, 'firewall.sh');
   fs.writeFileSync(scriptCopy, scriptSource
@@ -119,8 +119,20 @@ const ipv6Open = runFirewall({ env: { FW_NO_IP6TABLES: '1', FW_IPV6_ROUTE: '1' }
 check('ip6tables unusable with an IPv6 route and IPv6 enabled: stop', ipv6Open.status !== 0 && /IPv6/.test(ipv6Open.output));
 const ipv6Disabled = runFirewall({ env: { FW_NO_IP6TABLES: '1', FW_IPV6_ROUTE: '1' }, ipv6Disabled: '1' });
 check('ip6tables unusable but IPv6 disabled: continue', ipv6Disabled.status === 0, ipv6Disabled.output);
+// Review of 54c7418: no default route does not make IPv6 unreachable (link-local, fe80::).
 const ipv6NoRoute = runFirewall({ env: { FW_NO_IP6TABLES: '1', FW_IPV6_ROUTE: '0' } });
-check('ip6tables unusable but no IPv6 route: continue', ipv6NoRoute.status === 0, ipv6NoRoute.output);
+check('ip6tables unusable, IPv6 enabled, no default route: still stop (link-local stays reachable)',
+  ipv6NoRoute.status !== 0 && /IPv6/.test(ipv6NoRoute.output), ipv6NoRoute.output);
+const ipv6Absent = runFirewall({ env: { FW_NO_IP6TABLES: '1' }, ipv6Disabled: 'absent' });
+check('ip6tables unusable, kernel without IPv6 (no disable_ipv6 file): continue', ipv6Absent.status === 0, ipv6Absent.output);
+
+// ---------------------------------------------------------------- Claude Code sign-in (review of 54c7418)
+// code.claude.com/docs/en/network-config: OAuth token exchange, refresh and revocation go to
+// platform.claude.com (claude.ai accounts included); claude.ai for claude.ai account authentication.
+['api.anthropic.com', 'platform.claude.com', 'claude.ai'].forEach(function (domain) {
+  check('Claude Code host allowed: ' + domain, nominal.calls.indexOf('dig +noall +answer A ' + domain) !== -1 &&
+    nominal.output.indexOf('Allowed ' + domain + '\n') !== -1);
+});
 
 // ---------------------------------------------------------------- DNS failure (review: dig + pipefail)
 const applianceDnsFailure = runFirewall({ environ: { INTERSIGHT_APPLIANCE_HOST: 'appliance.example.test' },
