@@ -13,8 +13,9 @@
 #      "containerEnv".
 #    - IPv6 is filtered too (ip6tables, loopback only): iptables alone covers IPv4. Without
 #      a usable ip6tables, IPv6 must be disabled in the container, otherwise the script stops.
-#    - Host exception limited to the default gateway itself, not its /24 (which also holds
-#      other containers).
+#    - No exception for the host or the default gateway: Docker publishes the ports of other
+#      containers on the gateway address too. VS Code reaches the container through
+#      "docker exec", not through the network.
 #    - DNS (UDP 53) only towards the resolvers of /etc/resolv.conf, not to any host.
 #    - No "outbound SSH to any host" rule: GitHub stays reachable (SSH included) through
 #      its published IP ranges.
@@ -35,9 +36,9 @@ IFS=$'\n\t'
 # Commands only from system directories, which "vscode" cannot write (see the entrypoint).
 export PATH=/usr/sbin:/usr/bin:/sbin:/bin
 
-# Environment of the container's first process, and the kernel switch for IPv6.
+# Environment of the container's first process, and the kernel IPv6 settings per interface.
 CONTAINER_ENVIRON=/proc/1/environ
-IPV6_DISABLED_FLAG=/proc/sys/net/ipv6/conf/all/disable_ipv6
+IPV6_CONF_DIR=/proc/sys/net/ipv6/conf
 # DNS resolvers of the container (written by Docker, read-only for "vscode").
 RESOLV_CONF=/etc/resolv.conf
 
@@ -96,14 +97,26 @@ if ip6tables -P OUTPUT DROP 2>/dev/null; then
     ip6tables -A INPUT -i lo -j ACCEPT
     ip6tables -A OUTPUT -o lo -j ACCEPT
     echo "IPv6 blocked (loopback only)"
-elif [ "$(cat "$IPV6_DISABLED_FLAG" 2>/dev/null || echo 1)" = "1" ]; then
-    # Flag set to 1, or absent (kernel without IPv6): no IPv6 traffic at all.
-    echo "IPv6 disabled in the container"
+elif [ ! -d "$IPV6_CONF_DIR" ]; then
+    echo "IPv6 absent from the kernel"
 else
-    # IPv6 enabled: even without a default route, link-local addresses (fe80::) and other
-    # directly connected networks stay reachable, so unfiltered IPv6 is never acceptable.
-    echo "ERROR: ip6tables is unusable while IPv6 is enabled: IPv6 would bypass the firewall"
-    exit 1
+    # Without ip6tables, every interface must have IPv6 disabled: even without a default
+    # route, link-local addresses (fe80::) stay reachable. conf/all/disable_ipv6 proves
+    # nothing when read ("Reading this value does not have any particular meaning", kernel
+    # ip-sysctl doc), so check "default" (future interfaces) and each interface. The
+    # loopback is skipped: its traffic never leaves the container. Unreadable = enabled.
+    ipv6_enabled_on=""
+    for ipv6_flag in "$IPV6_CONF_DIR"/*/disable_ipv6; do
+        interface=$(basename "$(dirname "$ipv6_flag")")
+        case "$interface" in all|lo) continue ;; esac
+        flag_value=$(cat "$ipv6_flag" 2>/dev/null || echo unreadable)
+        [ "$flag_value" = "1" ] || ipv6_enabled_on="$ipv6_enabled_on $interface"
+    done
+    if [ -n "$ipv6_enabled_on" ]; then
+        echo "ERROR: ip6tables is unusable while IPv6 is enabled on:$ipv6_enabled_on (IPv6 would bypass the firewall)"
+        exit 1
+    fi
+    echo "IPv6 disabled on every interface"
 fi
 
 # Appliance from the container environment (empty when INTERSIGHT_APPLIANCE_HOST is not set).
@@ -139,12 +152,6 @@ done <<< "$dns_servers"
 if [ "$dns_rule_count" -eq 0 ]; then
     echo "ERROR: no IPv4 nameserver in $RESOLV_CONF"; exit 1
 fi
-
-# Default gateway only (Docker / VS Code plumbing), not the rest of its subnet.
-HOST_IP=$(ip route | awk '/^default/ {print $3; exit}')
-if ! is_ipv4 "$HOST_IP"; then echo "ERROR: cannot detect the default gateway"; exit 1; fi
-iptables -A INPUT -s "$HOST_IP" -j ACCEPT
-iptables -A OUTPUT -d "$HOST_IP" -j ACCEPT
 
 # --- 3. Allow-list, filled while everything else is already blocked
 ipset create allowed-domains hash:net

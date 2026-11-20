@@ -13,9 +13,15 @@ if grep -nE '\blet |\bconst |=>|`' src/collector.js; then
 fi
 
 echo "== 3/4 Template is up to date with src/collector.js"
+# Snapshot of templates/ before generation, compared with the result: does not depend on what
+# is staged in git (a regenerated but unstaged template is consistent, so it passes).
+templates_before=$(mktemp -d)
+trap 'rm -rf "$templates_before"' EXIT
+cp -a templates/. "$templates_before"/
 python3 tools/generate_templates.py
-if ! git diff --exit-code --stat templates/; then
-    echo "The generated template differs from the committed one: commit templates/ with your change."
+if ! diff -r "$templates_before" templates >/dev/null; then
+    diff -r --brief "$templates_before" templates || true
+    echo "templates/ was out of date with src/collector.js and has just been regenerated: review and commit it."
     exit 1
 fi
 

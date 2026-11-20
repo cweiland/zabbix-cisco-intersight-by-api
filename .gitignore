@@ -11,7 +11,10 @@ cisco-docs/
 params.json
 
 # Editors / OS
-.vscode/
+# .vscode/ stays local, except extensions.json: the folder must exist because the dev container
+# mounts it read-only (.devcontainer/devcontainer.json).
+.vscode/*
+!.vscode/extensions.json
 .idea/
 .DS_Store
 __pycache__/

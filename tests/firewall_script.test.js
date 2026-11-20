@@ -6,6 +6,13 @@
 const fs = require('fs'), os = require('os'), path = require('path');
 const { spawnSync } = require('child_process');
 
+// Linux only (bash, GNU sed -z, symlinks): the script runs in the Linux dev container. Skipped
+// elsewhere (macOS, native Windows) so that `node tests/run_all.js` still works there; it
+// always runs in the dev container and in the CI (ubuntu-latest).
+if (process.platform !== 'linux') {
+  console.log('SKIP firewall tests: Linux only (current platform: ' + process.platform + ')');
+  process.exit(0);
+}
 const repoRoot = path.join(__dirname, '..');
 const scriptSource = fs.readFileSync(path.join(repoRoot, '.devcontainer/intersight-init-firewall.sh'), 'utf8');
 let failures = 0;
@@ -46,25 +53,34 @@ exit 0
 
 // Runs a copy of the script whose /proc paths point to test files.
 //   environ        variables of the container's PID 1 (where the appliance is read)
-//   ipv6Disabled   content of /proc/sys/net/ipv6/conf/all/disable_ipv6
+//   ipv6Conf       disable_ipv6 value per entry of /proc/sys/net/ipv6/conf ('absent': no
+//                  IPv6 in the kernel; the value 'unreadable' makes the file unreadable)
 //   resolvConf     content of /etc/resolv.conf (default: one IPv4 resolver)
 function runFirewall(options) {
   options = options || {};
   const runDir = fs.mkdtempSync(path.join(workDir, 'run-'));
   const environFile = path.join(runDir, 'environ');
-  const ipv6File = path.join(runDir, 'disable_ipv6');
+  const ipv6ConfDir = path.join(runDir, 'ipv6-conf');
   const logFile = path.join(runDir, 'calls.log');
   const resolvFile = path.join(runDir, 'resolv.conf');
   fs.writeFileSync(resolvFile, options.resolvConf !== undefined ? options.resolvConf : 'nameserver 192.168.65.7\n');
   fs.writeFileSync(environFile, Object.keys(options.environ || {}).map(function (key) {
     return key + '=' + options.environ[key] + '\0';
   }).join(''));
-  if (options.ipv6Disabled !== 'absent') { fs.writeFileSync(ipv6File, (options.ipv6Disabled || '0') + '\n'); }
+  if (options.ipv6Conf !== 'absent') {
+    const ipv6Conf = options.ipv6Conf || { all: '0', default: '0', lo: '0', eth0: '0' };
+    Object.keys(ipv6Conf).forEach(function (entry) {
+      fs.mkdirSync(path.join(ipv6ConfDir, entry), { recursive: true });
+      // A directory in place of the file: reading it fails, as an unreadable flag would.
+      if (ipv6Conf[entry] === 'unreadable') { fs.mkdirSync(path.join(ipv6ConfDir, entry, 'disable_ipv6')); }
+      else { fs.writeFileSync(path.join(ipv6ConfDir, entry, 'disable_ipv6'), ipv6Conf[entry] + '\n'); }
+    });
+  }
   fs.writeFileSync(logFile, '');
   const scriptCopy = path.join(runDir, 'firewall.sh');
   fs.writeFileSync(scriptCopy, scriptSource
     .split('/proc/1/environ').join(environFile)
-    .split('/proc/sys/net/ipv6/conf/all/disable_ipv6').join(ipv6File)
+    .split('/proc/sys/net/ipv6/conf').join(ipv6ConfDir)
     .split('/etc/resolv.conf').join(resolvFile)
     // The script resets PATH to system directories: put the stubs in front of them.
     .split('export PATH=/usr/sbin:/usr/bin:/sbin:/bin').join('export PATH=' + stubDir + ':/usr/sbin:/usr/bin:/sbin:/bin'));
@@ -111,10 +127,12 @@ check('appliance read from the container environment (PID 1): HTTPS rule', withA
 const callerEnvironment = runFirewall({ environ: {}, env: { INTERSIGHT_APPLIANCE_HOST: '203.0.113.9' } });
 check('the caller\'s own environment variable is ignored', firstIndexMatching(callerEnvironment.calls, httpsRule) === -1);
 
-// ---------------------------------------------------------------- gateway only (review: /24 exception)
-check('host exception limited to the default gateway', nominal.calls.indexOf('iptables -A OUTPUT -d 172.17.0.1 -j ACCEPT') !== -1 &&
-  nominal.calls.indexOf('iptables -A INPUT -s 172.17.0.1 -j ACCEPT') !== -1);
+// ---------------------------------------------------------------- no host exception (reviews: /24, then gateway)
+// Review of 674d224: Docker publishes other containers' ports on the gateway address too.
+check('no exception for the default gateway (172.17.0.1)', nominal.calls.filter(function (c) { return /172\.17\.0\.1/.test(c); }).length === 0,
+  nominal.calls.filter(function (c) { return /172\.17/.test(c); }).join(' | '));
 check('no /24 host network exception', nominal.calls.filter(function (c) { return /\/24 -j ACCEPT/.test(c); }).length === 0);
+check('the routing table is no longer read (no gateway rule to build)', firstIndexMatching(nominal.calls, /^ip route/) === -1);
 
 // ---------------------------------------------------------------- IPv6 (review: iptables covers IPv4 only)
 const ip6Drop = indexOfCall(nominal.calls, 'ip6tables -P OUTPUT DROP');
@@ -123,14 +141,22 @@ check('IPv6 OUTPUT DROP, set before the IPv6 flush', ip6Drop !== -1 && ip6Drop <
 check('IPv6 loopback kept', nominal.calls.indexOf('ip6tables -A OUTPUT -o lo -j ACCEPT') !== -1);
 const ipv6Open = runFirewall({ env: { FW_NO_IP6TABLES: '1', FW_IPV6_ROUTE: '1' } });
 check('ip6tables unusable with an IPv6 route and IPv6 enabled: stop', ipv6Open.status !== 0 && /IPv6/.test(ipv6Open.output));
-const ipv6Disabled = runFirewall({ env: { FW_NO_IP6TABLES: '1', FW_IPV6_ROUTE: '1' }, ipv6Disabled: '1' });
-check('ip6tables unusable but IPv6 disabled: continue', ipv6Disabled.status === 0, ipv6Disabled.output);
+const ipv6Disabled = runFirewall({ env: { FW_NO_IP6TABLES: '1', FW_IPV6_ROUTE: '1' },
+  ipv6Conf: { all: '1', default: '1', lo: '0', eth0: '1' } });
+check('ip6tables unusable but IPv6 disabled on every interface (loopback aside): continue', ipv6Disabled.status === 0, ipv6Disabled.output);
+// Review of 674d224: reading conf/all/disable_ipv6 proves nothing (kernel ip-sysctl doc).
+const ipv6AllButEth0 = runFirewall({ env: { FW_NO_IP6TABLES: '1' }, ipv6Conf: { all: '1', default: '1', lo: '1', eth0: '0' } });
+check('ip6tables unusable, all=1 but eth0=0: stop', ipv6AllButEth0.status !== 0 && /eth0/.test(ipv6AllButEth0.output), ipv6AllButEth0.output);
+const ipv6DefaultOn = runFirewall({ env: { FW_NO_IP6TABLES: '1' }, ipv6Conf: { all: '1', default: '0', lo: '1', eth0: '1' } });
+check('ip6tables unusable, default=0 (future interfaces): stop', ipv6DefaultOn.status !== 0 && /default/.test(ipv6DefaultOn.output), ipv6DefaultOn.output);
+const ipv6Unreadable = runFirewall({ env: { FW_NO_IP6TABLES: '1' }, ipv6Conf: { all: '1', default: '1', lo: '1', eth0: 'unreadable' } });
+check('ip6tables unusable, unreadable flag: stop (fail-closed)', ipv6Unreadable.status !== 0 && /eth0/.test(ipv6Unreadable.output), ipv6Unreadable.output);
 // Review of 54c7418: no default route does not make IPv6 unreachable (link-local, fe80::).
 const ipv6NoRoute = runFirewall({ env: { FW_NO_IP6TABLES: '1', FW_IPV6_ROUTE: '0' } });
 check('ip6tables unusable, IPv6 enabled, no default route: still stop (link-local stays reachable)',
   ipv6NoRoute.status !== 0 && /IPv6/.test(ipv6NoRoute.output), ipv6NoRoute.output);
-const ipv6Absent = runFirewall({ env: { FW_NO_IP6TABLES: '1' }, ipv6Disabled: 'absent' });
-check('ip6tables unusable, kernel without IPv6 (no disable_ipv6 file): continue', ipv6Absent.status === 0, ipv6Absent.output);
+const ipv6Absent = runFirewall({ env: { FW_NO_IP6TABLES: '1' }, ipv6Conf: 'absent' });
+check('ip6tables unusable, kernel without IPv6 (no /proc/sys/net/ipv6/conf): continue', ipv6Absent.status === 0, ipv6Absent.output);
 
 // ---------------------------------------------------------------- Claude Code sign-in (review of 54c7418)
 // code.claude.com/docs/en/network-config: OAuth token exchange, refresh and revocation go to
@@ -226,6 +252,22 @@ if (fs.existsSync(entrypointPath)) {
 } else {
   check('entrypoint script .devcontainer/intersight-entrypoint.sh exists', false);
 }
+// Review of 674d224: files that the HOST executes must not be writable from the container
+// (initializeCommand in devcontainer.json, git hooks and git config used by git on the host,
+// VS Code workspace settings and tasks when the folder is reopened locally).
+['.devcontainer', '.git/hooks', '.git/config', '.vscode'].forEach(function (relative) {
+  const target = '${containerWorkspaceFolder}/' + relative;
+  check('read-only in the container: ' + relative, (devcontainer.mounts || []).some(function (m) {
+    return m.indexOf('source=${localWorkspaceFolder}/' + relative + ',') === 0 &&
+      m.indexOf('target=' + target + ',') !== -1 && /,type=bind,readonly$/.test(m);
+  }), JSON.stringify(devcontainer.mounts));
+});
+check('.vscode exists in the repository (a bind mount needs an existing source)',
+  fs.existsSync(path.join(repoRoot, '.vscode')));
+// Review of 674d224: without CLAUDE_CONFIG_DIR, ~/.claude.json lives outside the volume
+// (Anthropic's reference devcontainer.json sets it to the volume path).
+check('CLAUDE_CONFIG_DIR points to the Claude Code volume',
+  (devcontainer.containerEnv || {}).CLAUDE_CONFIG_DIR === '/home/vscode/.claude');
 const claudeMount = (devcontainer.mounts || []).filter(function (m) { return /target=\/home\/vscode\/\.claude/.test(m); });
 check('Claude Code volume mount point created and owned by vscode in the image', claudeMount.length === 1 &&
   /mkdir -p \/home\/vscode\/\.claude[^\n]*chown vscode:vscode \/home\/vscode\/\.claude/.test(dockerfile));
