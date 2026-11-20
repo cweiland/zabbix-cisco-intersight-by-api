@@ -1,15 +1,16 @@
 #!/bin/bash
 # =====================================================================================
-#  Outbound firewall of the development container (run at start by devcontainer.json).
+#  Outbound firewall of the development container, run as root by the image ENTRYPOINT
+#  (.devcontainer/intersight-entrypoint.sh) at every container start.
 # =====================================================================================
 #  Adapted from the reference dev container of Anthropic (anthropics/claude-code,
 #  .devcontainer/init-firewall.sh). Differences, all on the side of safety:
-#    - Fail-closed: the DROP policies (IPv4 and IPv6) are set FIRST, before anything is
-#      flushed. A failure at any later step leaves the container blocked, never open.
-#    - No caller-chosen destination: "vscode" may run this script through sudo, so it takes
-#      no argument (the sudoers rule forbids them too). The optional Intersight appliance is
-#      read from the environment of the container's PID 1, set at creation from
-#      devcontainer.json "containerEnv" and not writable by "vscode".
+#    - Fail-closed at two levels: the DROP policies (IPv4 and IPv6) are set FIRST, before
+#      anything is flushed, and any error ends the ENTRYPOINT, hence the container.
+#    - No sudo in the container: "vscode" (and Claude Code) cannot run or change this
+#      script. It takes no argument; the optional Intersight appliance is read from the
+#      environment of the container's PID 1, set at creation from devcontainer.json
+#      "containerEnv".
 #    - IPv6 is filtered too (ip6tables, loopback only): iptables alone covers IPv4. Without
 #      a usable ip6tables, IPv6 must be disabled in the container, otherwise the script stops.
 #    - Host exception limited to the default gateway itself, not its /24 (which also holds
@@ -26,7 +27,7 @@
 #
 #  The unit tests never need the network: every Intersight / Zabbix call is mocked.
 #  tests/firewall_script.test.js runs this script with stub commands.
-#  Usage: sudo /usr/local/bin/intersight-init-firewall.sh   (no argument)
+#  Usage: /usr/local/bin/intersight-init-firewall.sh   (as root, no argument)
 # =====================================================================================
 set -euo pipefail
 IFS=$'\n\t'
@@ -68,7 +69,8 @@ allow_domain() {
         if ! is_ipv4 "$ip"; then
             echo "ERROR: invalid IP from DNS for $domain: $ip"; exit 1
         fi
-        ipset add -exist allowed-domains "$ip"
+        # Explicit exit: callers use "allow_domain ... || ...", where set -e is off.
+        ipset add -exist allowed-domains "$ip" || { echo "ERROR: cannot add $ip ($domain) to the allow-list"; exit 1; }
     done <<< "$ips"
     echo "Allowed $domain"
 }

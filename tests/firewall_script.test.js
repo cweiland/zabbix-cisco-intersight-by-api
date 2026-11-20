@@ -134,6 +134,11 @@ check('ip6tables unusable, kernel without IPv6 (no disable_ipv6 file): continue'
     nominal.output.indexOf('Allowed ' + domain + '\n') !== -1);
 });
 
+// Review of 711c051: allow_domain runs on the left of "||", where bash disables set -e.
+const ipsetFailure = runFirewall({ env: { FW_FAIL_ON: 'ipset add -exist allowed-domains 198.51.100.7' } });
+check('a failed ipset insertion stops the script (no "Allowed" line)', ipsetFailure.status !== 0 &&
+  !/Allowed api\.github\.com/.test(ipsetFailure.output), ipsetFailure.output);
+
 // ---------------------------------------------------------------- DNS failure (review: dig + pipefail)
 const applianceDnsFailure = runFirewall({ environ: { INTERSIGHT_APPLIANCE_HOST: 'appliance.example.test' },
   env: { FW_DIG_FAIL: 'appliance.example.test' } });
@@ -148,10 +153,38 @@ check('GitHub IPv6 ranges are not added to the IPv4 set', nominal.calls.filter(f
 // ---------------------------------------------------------------- container settings
 const dockerfile = fs.readFileSync(path.join(repoRoot, '.devcontainer/Dockerfile'), 'utf8');
 const devcontainer = JSON.parse(fs.readFileSync(path.join(repoRoot, '.devcontainer/devcontainer.json'), 'utf8'));
-check('sudoers allows the firewall script WITHOUT arguments only',
-  /NOPASSWD: \/usr\/local\/bin\/intersight-init-firewall\.sh ""/.test(dockerfile));
-check('postStartCommand passes no argument to the firewall',
-  /sudo \/usr\/local\/bin\/intersight-init-firewall\.sh &&/.test(devcontainer.postStartCommand), devcontainer.postStartCommand);
+// Review of 711c051: a failed postStartCommand does not stop the container, so the firewall
+// runs in the image ENTRYPOINT instead. With overrideCommand false, the dev container CLI runs
+// ENTRYPOINT + CMD through `exec "$@"` (devcontainers/cli, src/spec-node/singleContainer.ts):
+// a failing firewall ends the container.
+check('no sudo at all for vscode (base image entry removed, none added)',
+  /rm -f \/etc\/sudoers\.d\/vscode/.test(dockerfile) && !/NOPASSWD/.test(dockerfile));
+check('overrideCommand is false (the image ENTRYPOINT runs)', devcontainer.overrideCommand === false);
+check('image ENTRYPOINT is the firewall entrypoint, CMD keeps the container running',
+  /ENTRYPOINT \["\/usr\/local\/bin\/intersight-entrypoint\.sh"\]/.test(dockerfile) && /CMD \["sleep", "infinity"\]/.test(dockerfile));
+check('postStartCommand no longer runs the firewall (nor sudo)',
+  !/firewall|sudo/.test(devcontainer.postStartCommand || ''), devcontainer.postStartCommand);
+const entrypointPath = path.join(repoRoot, '.devcontainer/intersight-entrypoint.sh');
+if (fs.existsSync(entrypointPath)) {
+  const entrypointSource = fs.readFileSync(entrypointPath, 'utf8');
+  function runEntrypoint(firewallExitCode) {
+    const runDir = fs.mkdtempSync(path.join(workDir, 'entry-'));
+    const fakeFirewall = path.join(runDir, 'firewall.sh');
+    fs.writeFileSync(fakeFirewall, '#!/usr/bin/env bash\necho FIREWALL_RAN "$#"\nexit ' + firewallExitCode + '\n', { mode: 0o755 });
+    const entryCopy = path.join(runDir, 'entrypoint.sh');
+    fs.writeFileSync(entryCopy, entrypointSource.split('/usr/local/bin/intersight-init-firewall.sh').join(fakeFirewall));
+    const result = spawnSync('bash', [entryCopy, 'sh', '-c', 'echo CMD_RAN'], { encoding: 'utf8' });
+    return { status: result.status, output: (result.stdout || '') + (result.stderr || '') };
+  }
+  const entryOk = runEntrypoint(0);
+  check('entrypoint: firewall run without argument, then the CMD', entryOk.status === 0 &&
+    /FIREWALL_RAN 0/.test(entryOk.output) && /CMD_RAN/.test(entryOk.output), entryOk.output);
+  const entryKo = runEntrypoint(1);
+  check('entrypoint: a failing firewall stops it before the CMD (container ends)', entryKo.status !== 0 &&
+    !/CMD_RAN/.test(entryKo.output), entryKo.output);
+} else {
+  check('entrypoint script .devcontainer/intersight-entrypoint.sh exists', false);
+}
 const claudeMount = (devcontainer.mounts || []).filter(function (m) { return /target=\/home\/vscode\/\.claude/.test(m); });
 check('Claude Code volume mount point created and owned by vscode in the image', claudeMount.length === 1 &&
   /mkdir -p \/home\/vscode\/\.claude[^\n]*chown vscode:vscode \/home\/vscode\/\.claude/.test(dockerfile));
