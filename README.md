@@ -21,6 +21,7 @@ Supervision de Cisco Intersight (SaaS ou Virtual Appliance) dans Zabbix 7.0 LTS,
 | `tools/check_metrics_against_doc.py` | Vérifie les métriques utilisées contre la doc « Supported Metrics » de ton appliance |
 | `tests/` | Tests Node.js sans dépendance : ECDSA (vecteur RFC 6979 + OpenSSL), modes d'auth, scénarios |
 | `docs/UPGRADE_7.4_FR.md` | Variante Zabbix 7.4 (blades découverts sous leur châssis) |
+| `SECURITY.md` | Signaler une vulnérabilité (signalement privé GitHub) et périmètre |
 | `docs/DEVCONTAINER_SECURITE_FR.md` | Configurer sa machine pour le devcontainer (identifiants git, SSH, vérifications) |
 | `CLAUDE.md` | Contexte du projet pour Claude Code (décisions, faits vérifiés, points ouverts) |
 
@@ -192,3 +193,9 @@ Si un de ces points est faux, l'item « API: last errors » affiche l'appel en c
 ## Performance de la signature hs2019
 
 L'ECDSA en JavaScript pur est coûteux dans l'interpréteur Duktape. Mesures de référence : ~10 ms par signature sous V8 avec JIT, ~280 ms sous V8 sans JIT. Duktape étant généralement plus lent, compte de 0,5 à 3 s par signature, soit 13 signatures par cycle (4 inventaires + 9 requêtes de télémétrie). Ces chiffres sont des estimations : la vraie mesure est l'item **« API: signing time (hs2019) »**. Un trigger se déclenche si le cycle approche le timeout de 120 s. Le cas échéant, augmente l'intervalle ou le timeout de l'item.
+
+## Licence
+
+Ce projet est distribué sous la **GNU Affero General Public License, version 3 uniquement** (`AGPL-3.0-only`), comme Zabbix : texte complet dans [LICENSE](LICENSE). Tu peux l'utiliser, le modifier et le redistribuer ; si tu distribues une version modifiée, ou si tu la fais utiliser par d'autres à travers un réseau, tu dois en publier le code source sous la même licence.
+
+La documentation Cisco utilisée pour construire le catalogue des métriques n'est pas incluse et n'est pas couverte par cette licence.

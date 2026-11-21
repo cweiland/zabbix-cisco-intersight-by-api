@@ -2,6 +2,7 @@
 *.pem
 *.key
 .env
+.env.*
 
 # Cisco documentation (not redistributable): keep it local
 Supported_Metrices.md

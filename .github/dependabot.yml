@@ -1,0 +1,31 @@
+# Dependabot version updates (ecosystem names from GitHub's "Dependabot supported ecosystems"
+# page). Weekly, one pull request per ecosystem. Review each one like any other change: the
+# pins (action SHAs, image digest, PyPI hashes) are what keeps the supply chain fixed.
+version: 2
+updates:
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    groups:
+      github-actions:
+        patterns: ["*"]
+
+  # Dev container features (devcontainer.json and devcontainer-lock.json).
+  - package-ecosystem: "devcontainers"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+
+  # Base image of .devcontainer/Dockerfile (pinned by digest) and PyPI packages of
+  # .devcontainer/requirements-dev.txt (pinned with hashes). GitHub's page does not say how
+  # Dependabot handles digests and --hash lines: if no pull request ever comes, update by hand.
+  - package-ecosystem: "docker"
+    directory: "/.devcontainer"
+    schedule:
+      interval: "weekly"
+
+  - package-ecosystem: "pip"
+    directory: "/.devcontainer"
+    schedule:
+      interval: "weekly"

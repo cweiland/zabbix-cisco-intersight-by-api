@@ -36,6 +36,7 @@ python3 tools/check_metrics_against_doc.py <Supported_Metrices.md>
 - `CLAUDE_CONFIG_DIR=/home/vscode/.claude` (volume), as in Anthropic's reference devcontainer: keeps `.claude.json` across rebuilds.
 - No `sudo` in the container (the base image's rule is removed): nothing can be installed at runtime and the firewall cannot be changed. The entrypoint and the firewall set `PATH=/usr/sbin:/usr/bin:/sbin:/bin`: the container PATH starts with `/usr/local/share/nvm/current/bin` (devcontainers Node feature, group `nvm`, which `vscode` belongs to), and root must never run a command from a directory `vscode` can write. Add tools to the `Dockerfile` instead; restart the container to re-apply the firewall.
 - `tests/firewall_script.test.js` runs the firewall with stub commands (order of rules, arguments refused, IPv6 per interface, no gateway exception, read-only host-executed files, CLAUDE_CONFIG_DIR, DNS resolvers only, DNS, ipset and GitHub range failures, appliance names that look like options) and the entrypoint (a failing firewall stops it before the CMD; fake commands in a writable PATH directory never run; readiness marker written only after the firewall, stale or foreign markers rejected by the wait script). It came from the Copilot reviews of PR #1; keep it passing when changing the script. Linux only: skipped on other platforms.
+- CI and supply chain (`tests/repository_config.test.js`): every GitHub Action pinned by full commit SHA with the release in a comment (`# v7.0.1`), `permissions: contents: read`, `persist-credentials: false`, Dependabot for github-actions, devcontainers, docker and pip. When adding an action, look up its SHA (`/repos/<owner>/<action>/commits/<tag>`), never use a tag alone.
 - Run `tools/ci.sh` before every commit: same steps as the GitHub CI. Step 3 compares `templates/` before and after generation (not with the git index), so a regenerated but unstaged template passes.
 - Never commit `params.json` (zabbix_js parameters, contains the private key) or `cisco-docs/` (Cisco pages used to rebuild the catalog).
 
@@ -94,7 +95,7 @@ python3 tools/check_metrics_against_doc.py <Supported_Metrices.md>
 ## Open items
 
 - Repository: `cweiland/zabbix-cisco-intersight-by-api` (public since the user made it so). First pushed from claude.ai through the GitHub connector; check that the CI workflow passes.
-- LICENSE: not chosen. Ask the user.
+- LICENSE: AGPL-3.0-only (user decision, "like Zabbix": Zabbix headers say "version 3", no "or later"). `LICENSE` is the FSF text byte for byte (sha256 0d96a4ff...abcb0, same as gnu.org/licenses/agpl-3.0.txt and Zabbix's COPYING); never edit it.
 - Optional metrics not collected: GPU (`hw.gpu.*`), voltage, current, optical signal power, detailed packet counters.
 
 ## Testing conventions
