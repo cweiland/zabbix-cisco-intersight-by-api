@@ -21,6 +21,7 @@ Supervision de Cisco Intersight (SaaS ou Virtual Appliance) dans Zabbix 7.0 LTS,
 | `tools/check_metrics_against_doc.py` | Vérifie les métriques utilisées contre la doc « Supported Metrics » de ton appliance |
 | `tests/` | Tests Node.js sans dépendance : ECDSA (vecteur RFC 6979 + OpenSSL), modes d'auth, scénarios |
 | `docs/UPGRADE_7.4_FR.md` | Variante Zabbix 7.4 (blades découverts sous leur châssis) |
+| `docs/DEVCONTAINER_SECURITE_FR.md` | Configurer sa machine pour le devcontainer (identifiants git, SSH, vérifications) |
 | `CLAUDE.md` | Contexte du projet pour Claude Code (décisions, faits vérifiés, points ouverts) |
 
 ## Développement
@@ -37,6 +38,8 @@ Le YAML est généré : **ne pas l'éditer à la main**. Il embarque une copie d
 ### Environnement de développement (bac à sable)
 
 Le dépôt fournit un devcontainer (`.devcontainer/`) : Ubuntu 24.04 avec Node 20, Python 3.12 et PyYAML 6.0.3, les mêmes versions que la CI, plus l'extension Claude Code.
+
+**Avant la première ouverture, configure ta machine en suivant [docs/DEVCONTAINER_SECURITE_FR.md](docs/DEVCONTAINER_SECURITE_FR.md)** : une partie de l'isolation (identifiants git, agent SSH) ne peut pas être réglée depuis le dépôt.
 
 - **Prérequis** : VS Code avec l'extension Dev Containers, et un moteur Docker. Sous Windows, le plus simple sans licence est Docker Engine installé dans une distribution WSL ; Docker Desktop est payant dans les entreprises de plus de 250 salariés ou de plus de 10 M$ de chiffre d'affaires.
 - **Ouverture** : commande « Dev Containers: Reopen in Container ». À chaque démarrage, le pare-feu est appliqué en premier, par le point d'entrée de l'image (`.devcontainer/intersight-entrypoint.sh`) : s'il échoue, le conteneur s'arrête et VS Code ne peut pas s'y connecter. Ensuite, `postStartCommand` attend que le pare-feu de ce démarrage soit complet (un marqueur écrit par root, propre à chaque démarrage, `.devcontainer/intersight-wait-for-firewall.sh`), puis lance les tests et le validateur. Le pare-feu est limité à 45 s (arrêt forcé 5 s plus tard), en dessous des 60 s d'attente : un démarrage bloqué (DNS, GitHub) arrête le conteneur au lieu de laisser VS Code se connecter trop tôt. Ensuite : si l'environnement est cassé, tu le sais tout de suite. VS Code et ses extensions, dont Claude Code, attendent la fin de `postStartCommand` (`waitFor`).
