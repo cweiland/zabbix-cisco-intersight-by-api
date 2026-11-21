@@ -4,6 +4,8 @@
 #  through the Dev Containers relay (see README, "Identifiants git de ta machine").
 #  Prints only whether a credential came back, never the credential itself.
 #  Usage: bash .devcontainer/check-host-credentials.sh   (as "vscode", in the container)
+#  If a sign-in window opens on the host while it runs, close it without signing in: the host
+#  still prompts (set "git config --global credential.interactive false" there).
 # =====================================================================================
 set -uo pipefail
 
