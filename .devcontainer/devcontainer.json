@@ -1,0 +1,37 @@
+{
+  "name": "zabbix-cisco-intersight",
+  "build": { "dockerfile": "Dockerfile" },
+  "features": {
+    "ghcr.io/devcontainers/features/node:1": { "version": "20" }
+  },
+  "remoteUser": "vscode",
+
+  "runArgs": ["--cap-add=NET_ADMIN", "--cap-add=NET_RAW", "--security-opt=no-new-privileges"],
+
+  "mounts": [
+    "source=intersight-claude-config-${devcontainerId},target=/home/vscode/.claude,type=volume",
+    "source=${localWorkspaceFolder}/.devcontainer,target=${containerWorkspaceFolder}/.devcontainer,type=bind,readonly",
+    "source=${localWorkspaceFolder}/.git,target=${containerWorkspaceFolder}/.git,type=bind,readonly",
+    "source=${localWorkspaceFolder}/.vscode,target=${containerWorkspaceFolder}/.vscode,type=bind,readonly"
+  ],
+
+  "containerEnv": {
+    "CLAUDE_CONFIG_DIR": "/home/vscode/.claude",
+    "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC": "1",
+    "INTERSIGHT_APPLIANCE_HOST": "${localEnv:INTERSIGHT_APPLIANCE_HOST}"
+  },
+
+  "overrideCommand": false,
+  "postStartCommand": "/usr/local/bin/intersight-wait-for-firewall.sh && node tests/run_all.js && python3 tools/validate_template.py",
+  "waitFor": "postStartCommand",
+
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "anthropic.claude-code",
+        "redhat.vscode-yaml",
+        "ms-python.python"
+      ]
+    }
+  }
+}

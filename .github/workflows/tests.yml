@@ -4,17 +4,29 @@ on:
   push:
   pull_request:
 
+# Least privilege: the jobs only read the repository (GITHUB_TOKEN read-only).
+permissions:
+  contents: read
+
 jobs:
   tests:
-    runs-on: ubuntu-latest
+    # Same release as the dev container image (Ubuntu 24.04). Not ubuntu-latest: GitHub was moving
+    # it to 26.04 (a run of efe8b5b got "Image: ubuntu-26.04"), whose timeout did not signal a
+    # grandchild process like the 24.04 one does.
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v4
+      # Actions pinned by full commit SHA (a moved tag cannot change what runs); the comment
+      # gives the release. Dependabot (.github/dependabot.yml) proposes the updates.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false   # no token left in .git/config: nothing is pushed
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: '20'
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
           python-version: '3.12'
 
@@ -29,7 +41,7 @@ jobs:
 
       - name: Template is up to date with src/collector.js
         run: |
-          pip install pyyaml==6.0.3
+          pip install --require-hashes -r .devcontainer/requirements-dev.txt
           python3 tools/generate_templates.py
           git diff --exit-code templates/
 
