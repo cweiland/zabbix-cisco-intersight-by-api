@@ -27,7 +27,7 @@ fs.readdirSync(workflowDir).filter(function (f) { return /\.ya?ml$/.test(f); }).
 
 const dependabot = read('.github/dependabot.yml');
 ['github-actions', 'devcontainers', 'docker', 'pip'].forEach(function (ecosystem) {
-  check('Dependabot watches ' + ecosystem, new RegExp('package-ecosystem:\\s*"' + ecosystem + '"').test(dependabot));
+  check('Dependabot watches ' + ecosystem, dependabot.indexOf('package-ecosystem: "' + ecosystem + '"') !== -1);
 });
 check('security policy (SECURITY.md) points to private vulnerability reporting',
   /Report a vulnerability/.test(read('SECURITY.md')));

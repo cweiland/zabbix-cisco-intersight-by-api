@@ -207,7 +207,10 @@ check('a failure while computing the GitHub ranges stops the script', aggregateF
 // Review of d70fd0a: shared CDN front ends widen the egress; the container never used them
 // (VS Code server copied from the host, extensions downloaded on the host).
 ['marketplace.visualstudio.com', 'vscode.blob.core.windows.net', 'update.code.visualstudio.com'].forEach(function (domain) {
-  check('VS Code host not allowed: ' + domain, firstIndexMatching(nominal.calls, new RegExp(domain.replace(/\./g, '\\.'))) === -1);
+  // Plain substring search: no regular expression built from a host name (CodeQL
+  // js/incomplete-hostname-regexp and js/incomplete-sanitization on the previous version).
+  check('VS Code host not allowed: ' + domain,
+    nominal.calls.every(function (call) { return call.indexOf(domain) === -1; }));
 });
 
 // ---------------------------------------------------------------- container settings
@@ -288,7 +291,12 @@ if (fs.existsSync(entrypointPath)) {
   check('firewall script resets PATH to system directories itself',
     /^export PATH=\/usr\/sbin:\/usr\/bin:\/sbin:\/bin$/m.test(scriptSource));
   // Review of 0e0663c: the firewall run must end (killed if needed) before the 60 s wait.
-  function secondsIn(source, name) { const m = new RegExp('^' + name + '=(\\d+)\\b', 'm').exec(source); return m ? Number(m[1]) : NaN; }
+  // Value of a "NAME=<digits>" line, read without building a regular expression from NAME.
+  function secondsIn(source, name) {
+    const line = source.split('\n').find(function (l) { return l.indexOf(name + '=') === 0; });
+    const digits = line ? /^\d+/.exec(line.slice(name.length + 1)) : null;
+    return digits ? Number(digits[0]) : NaN;
+  }
   const timeLimit = secondsIn(entrypointSource, 'FIREWALL_TIME_LIMIT_SECONDS');
   const killAfter = secondsIn(entrypointSource, 'FIREWALL_KILL_AFTER_SECONDS');
   const waitSeconds = secondsIn(waitSource, 'ATTEMPTS') * 0.5;
