@@ -76,10 +76,10 @@ Get-Service ssh-agent      # attendu : Stopped (type de démarrage : Disabled)
 ### 1.4 GitHub CLI (`gh`), si tu l'utilises
 
 - **Ne lance jamais `gh auth setup-git`.** Cette commande ferait de `gh` l'assistant d'identifiants de git, et son jeton (en général `repo`, `workflow`, `gist`) deviendrait accessible par le relais.
-- **Vérifie qu'aucun niveau de config ne le déclare :**
+- **Vérifie qu'aucun niveau de config ne le déclare.** `gh auth setup-git` l'inscrit sous une clé propre à l'URL (`credential.https://github.com.helper`) : il faut donc lister toutes les clés `credential.*.helper`, pas seulement `credential.helper` :
 
 ```powershell
-git config --show-origin --get-all credential.helper   # attendu : aucune ligne "gh auth git-credential"
+git config --show-origin --get-regexp '^credential\..*helper$'   # attendu : aucune ligne "gh auth git-credential"
 ```
 
 - **Aligne `gh` sur SSH :** `gh config set git_protocol ssh`.
@@ -109,12 +109,13 @@ Après « Rebuild Container », dans le terminal du conteneur :
 bash .devcontainer/check-host-credentials.sh
 ```
 
-Le script demande un identifiant github.com au relais, et indique seulement si une réponse est revenue. Il n'affiche jamais l'identifiant.
+Le script demande un identifiant github.com au relais, et indique seulement si une réponse est revenue. Il n'affiche jamais l'identifiant. Code de sortie : 0 = aucun identifiant, 1 = un identifiant est revenu, 2 = vérification impossible.
 
 | Résultat | Signification |
 |---|---|
 | `OK: no GitHub credential from the host` | le relais ne donne rien |
 | `DANGER: … returns a GitHub credential from the host` | il reste un identifiant : reprends la section 1.1 |
+| `UNVERIFIED: …` | le relais n'a pas répondu (délai, erreur) : **rien n'est prouvé**. Relance le script ; si le message persiste, vérifie la section 1 à la main |
 | Une fenêtre de connexion s'ouvre sur ta machine | ferme-la **sans te connecter**, puis reprends la section 1.2 |
 
 Relance ce script après chaque changement de ta config git ou de `gh`.
