@@ -19,6 +19,8 @@ fs.readdirSync(workflowDir).filter(function (f) { return /\.ya?ml$/.test(f); }).
   const unpinned = uses.filter(function (line) { return !/@[0-9a-f]{40}(\s|$)/.test(line); });
   check(file + ': every action pinned by a full commit SHA', unpinned.length === 0, unpinned.join(' | '));
   check(file + ': read-only token (permissions: contents: read)', /^permissions:\s*\n\s+contents:\s*read\s*$/m.test(workflow));
+  check(file + ': runner pinned to ubuntu-24.04 (the dev container release), not ubuntu-latest',
+    /runs-on:\s*ubuntu-24\.04\s*$/m.test(workflow) && !/runs-on:\s*ubuntu-latest/.test(workflow));
   check(file + ': checkout does not persist credentials',
     !/actions\/checkout@/.test(workflow) || /persist-credentials:\s*false/.test(workflow));
 });

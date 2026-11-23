@@ -299,7 +299,12 @@ if (fs.existsSync(entrypointPath)) {
   // A stalled firewall that ignores SIGTERM: the entrypoint must still end, without marker, before the CMD.
   const stalledDir = fs.mkdtempSync(path.join(workDir, 'stalled-'));
   const stalledFirewall = path.join(stalledDir, 'firewall.sh');
-  fs.writeFileSync(stalledFirewall, '#!/bin/bash\ntrap "" TERM\nsleep 30\n', { mode: 0o755 });
+  // "exec": the stalled process IS timeout's direct child. GNU timeout (Ubuntu 24.04, the dev
+  // container) also signals its process group, but not every implementation does (on the
+  // ubuntu-26.04 CI runner a grandchild "sleep" survived and kept the test's stdout pipe open
+  // for 20 s). In the container that does not matter: once the entrypoint (PID 1) exits, the
+  // kernel kills every process left in the container. An ignored SIGTERM survives exec.
+  fs.writeFileSync(stalledFirewall, '#!/bin/bash\ntrap "" TERM\nexec sleep 30\n', { mode: 0o755 });
   const stalledMarker = path.join(stalledDir, 'firewall.ready');
   const stalledEntry = path.join(stalledDir, 'entrypoint.sh');
   fs.writeFileSync(stalledEntry, entrypointSource.split('/usr/local/bin/intersight-init-firewall.sh').join(stalledFirewall)

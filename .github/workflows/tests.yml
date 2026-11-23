@@ -10,7 +10,10 @@ permissions:
 
 jobs:
   tests:
-    runs-on: ubuntu-latest
+    # Same release as the dev container image (Ubuntu 24.04). Not ubuntu-latest: GitHub was moving
+    # it to 26.04 (a run of efe8b5b got "Image: ubuntu-26.04"), whose timeout did not signal a
+    # grandchild process like the 24.04 one does.
+    runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
       # Actions pinned by full commit SHA (a moved tag cannot change what runs); the comment
