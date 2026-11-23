@@ -19,3 +19,6 @@ params.json
 .idea/
 .DS_Store
 __pycache__/
+
+# Personal Claude Code approvals ("don't ask again"): never shared
+.claude/settings.local.json
