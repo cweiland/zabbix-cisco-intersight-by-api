@@ -22,6 +22,8 @@ The workspace is shared with the host: every edit you make is already in the use
    `git switch -c <branch>` / `git status` and `git diff` (review) / `git add -A` / `git commit -F .commit-msg.txt` / `git push -u origin <branch>`, then the pull request on GitHub.
 5. One change at a time: wait until the user has committed before starting the next one.
 
+If an edit reports an error (for example `ENOENT`), check `git diff` before retrying: on this mount the write may have succeeded anyway, and a retry could apply it twice. Run `tools/ci.sh` only once all edits are done, never in parallel with them.
+
 Never ask for `.git` to become writable or to commit from the container: a writable `.git` (`commondir`, hooks, config) lets the container run commands through git on the host.
 
 ## User environment (hard constraints)
