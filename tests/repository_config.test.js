@@ -49,5 +49,9 @@ const copilotInstructions = read('.github/copilot-instructions.md');
 check('CLAUDE.md has the working rules (no inference, security and personal data check)',
   /## Working rules/.test(read('CLAUDE.md')) && /no inference/.test(read('CLAUDE.md')) && /personal data/.test(read('CLAUDE.md')));
 
+check('change workflow documented: commit message file is git-ignored and described in CLAUDE.md',
+  /^\.commit-msg\.txt$/m.test(read('.gitignore')) && /## Change workflow/.test(read('CLAUDE.md')) &&
+  read('.github/copilot-instructions.md').indexOf('.commit-msg.txt') !== -1);
+
 if (failures) { console.log(failures + ' failure(s)'); }
 process.exitCode = failures ? 1 : 0;

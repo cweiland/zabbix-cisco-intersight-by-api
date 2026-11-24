@@ -25,7 +25,9 @@ request, so the essential rules are repeated here.
 
 ## Dev container and security
 
-- Git is read-only in the dev container: do not commit or push; the user does it on the host.
+- Git is read-only in the dev container: do not commit or push; the user does it on the host. Do not
+  produce patches or mbox files: edit the files, write the commit message to `.commit-msg.txt`
+  (git-ignored) and give the user the branch name ("Change workflow" in `CLAUDE.md`).
 - Never read `params.json`, `*.pem`, `*.key` or `.env*` (credentials), by any means.
 - Never call the Dev Containers credential relay (`/tmp/vscode-remote-containers-*.js`) or
   `.devcontainer/check-host-credentials.sh`: only the user runs that check.

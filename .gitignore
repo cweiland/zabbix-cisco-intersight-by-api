@@ -20,5 +20,8 @@ params.json
 .DS_Store
 __pycache__/
 
+# Commit message written by Claude Code for the user (see CLAUDE.md, "Change workflow")
+.commit-msg.txt
+
 # Personal Claude Code approvals ("don't ask again"): never shared
 .claude/settings.local.json

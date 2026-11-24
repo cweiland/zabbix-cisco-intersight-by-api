@@ -9,7 +9,20 @@ decisions, verified facts and open points. Read it before changing anything.
 - **Only justified, verified answers: no inference, no assumption.** Back every claim with a source (official doc, code, test, log, command output) and say plainly when something is not verified. Show the reasoning first, then the answer.
 - **Check every change for security problems and personal data before handing it over** (code, docs, commit messages): secrets, keys, tokens, signed URLs, the user's name, e-mail, machine name, host paths and logs. The repository is public.
 - Answer the user in French; code and code comments in English (see below).
-- Git is read-only in the dev container: propose the change, the user reviews, commits and pushes from the host.
+- Git is read-only in the dev container: propose the change, the user reviews, commits and pushes from the host (see "Change workflow").
+
+## Change workflow (no patch, no mbox)
+
+The workspace is shared with the host: every edit you make is already in the user's working tree on Windows. A patch or mbox on top of it conflicts with those same edits (the user had to stash or revert), so:
+
+1. Before editing, check that the working tree is clean (`git status`); if not, ask the user.
+2. Edit the files; run `tools/ci.sh` (it asks for approval).
+3. Write the commit message to `.commit-msg.txt` at the repository root (git-ignored; English subject line under 72 characters, blank line, body, then the `Co-Authored-By` trailer). Check it for security problems and personal data like any change.
+4. Give the user a branch name and these commands to run on the host, from `main` up to date:
+   `git switch -c <branch>` / `git status` and `git diff` (review) / `git add -A` / `git commit -F .commit-msg.txt` / `git push -u origin <branch>`, then the pull request on GitHub.
+5. One change at a time: wait until the user has committed before starting the next one.
+
+Never ask for `.git` to become writable or to commit from the container: a writable `.git` (`commondir`, hooks, config) lets the container run commands through git on the host.
 
 ## User environment (hard constraints)
 
