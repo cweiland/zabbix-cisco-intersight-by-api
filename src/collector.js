@@ -44,7 +44,7 @@
  *      temp_max, temp_margin_min, temp_margin_degraded_min,
  *      fan_min, fan_max, fan_margin_min, psu_util_max,
  *      cpu_util, cpu_util_max, mem_util, mem_ecc_correctable, mem_ecc_uncorrectable, mem_ecc_dimms,
- *      net_errors, firmware, mgmt_ip, oper_state, chassis_key, is_blade,
+ *      net_errors, firmware, mgmt_ip, oper_state, chassis_key, chassis_moid (servers), is_blade,
  *      psus  [ {name, util, out_w, in_w} ],
  *      ports [ {name, role, rx_bps, tx_bps, speed_bps, util, up, errors} ]  (bits per second),
  *      blades [ {moid, display, model} ]   (chassis only)
@@ -1226,8 +1226,17 @@ function collectTelemetryByDeviceKey(timeInterval) {
 //  7. DEVICE OBJECTS (inventory + telemetry)
 // =====================================================================================
 
-// Identifies a chassis inside its UCS domain: "<registered device Moid>:<chassis id>".
+// Moid of the chassis holding a server, from the compute.PhysicalSummary relationship
+// "EquipmentChassis" (Intersight API schema, see CiscoDevNet/intersight-python
+// model compute_physical_summary_all_of.py). Empty string when absent (rack servers).
+function getEquipmentChassisMoid(inventoryObject) {
+    return (inventoryObject.EquipmentChassis && inventoryObject.EquipmentChassis.Moid) || '';
+}
+
+// Fallback identifier of a chassis inside its UCS domain: "<registered device Moid>:<chassis id>".
 // Chassis ids restart at 1 in each domain, hence the domain prefix.
+// Seen on the user's appliance: the RegisteredDevice Moid of a blade differs from the one
+// of its chassis, so this key alone never matches; EquipmentChassis is used first.
 // Empty string for rack servers (no chassis).
 function buildChassisKey(inventoryObject) {
     var domainMoid = (inventoryObject.RegisteredDevice && inventoryObject.RegisteredDevice.Moid) || '';
@@ -1292,9 +1301,11 @@ function buildServerDevice(inventoryObject, telemetryByDeviceKey) {
     if (inventoryObject.OperPowerState) {
         device.power_state = (String(inventoryObject.OperPowerState).toLowerCase() === 'on') ? 1 : 0;
     }
+    device.chassis_moid = getEquipmentChassisMoid(inventoryObject);
     device.chassis_key = buildChassisKey(inventoryObject);
     // Blade = inside a chassis, or a blade model (UCSB-* / UCSX-*).
-    device.is_blade = (device.chassis_key !== '' || /^UCS[BX]/.test(device.model)) ? 1 : 0;
+    device.is_blade = (device.chassis_moid !== '' || device.chassis_key !== '' ||
+        /^UCS[BX]/.test(device.model)) ? 1 : 0;
     return device;
 }
 
@@ -1334,16 +1345,22 @@ function assignUniqueDisplayNames(devices) {
     }
 }
 
+// True when the server sits in the chassis: EquipmentChassis relationship when the
+// server has one, otherwise the "<registered device Moid>:<chassis id>" fallback key.
+function isServerInChassis(server, chassis) {
+    if (server.chassis_moid !== '') { return server.chassis_moid === chassis.moid; }
+    return chassis.chassis_key !== '' && server.chassis_key === chassis.chassis_key;
+}
+
 // Adds to each chassis the list of its blades (used by the Zabbix 7.4 nested discovery).
 function attachBladesToChassis(chassisDevices, serverDevices) {
     var chassisIndex, serverIndex, chassis, server;
     for (chassisIndex = 0; chassisIndex < chassisDevices.length; chassisIndex++) {
         chassis = chassisDevices[chassisIndex];
         chassis.blades = [];
-        if (chassis.chassis_key === '') { continue; }
         for (serverIndex = 0; serverIndex < serverDevices.length; serverIndex++) {
             server = serverDevices[serverIndex];
-            if (server.chassis_key === chassis.chassis_key) {
+            if (isServerInChassis(server, chassis)) {
                 chassis.blades.push({ moid: server.moid, display: server.display, model: server.model });
             }
         }

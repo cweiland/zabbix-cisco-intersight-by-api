@@ -1,5 +1,9 @@
 # Changelog
 
+## Non publié
+- Correctif : la liste `blades` de chaque châssis restait vide. Sur l'appliance, le `RegisteredDevice` d'une lame diffère de celui de son châssis, donc la clé `RegisteredDevice.Moid:ChassisId` ne correspondait jamais. Une lame est désormais rattachée par la relation `EquipmentChassis` de `compute.PhysicalSummary` (schéma de l'API Intersight, SDK CiscoDevNet/intersight-python) ; l'ancienne clé ne sert plus qu'en repli. Seul le mode imbriqué de Zabbix 7.4 (`flat_servers=0`) était concerné.
+- Nouveau champ `chassis_moid` sur les serveurs (Moid du châssis, vide pour un rack) ; test `tests/blade_chassis_matching.test.js`.
+
 ## 7.0-6
 - Correctif d'import : `Invalid parameter "/N/params": value is too long`. Zabbix limite les scripts à 65 535 caractères, et le collecteur commenté en fait 71 266. Le template embarque désormais une copie sans commentaires (environ 56 000 caractères) générée automatiquement ; `src/collector.js` reste la source commentée.
 - `tools/validate_template.py` vérifie la longueur des scripts.
