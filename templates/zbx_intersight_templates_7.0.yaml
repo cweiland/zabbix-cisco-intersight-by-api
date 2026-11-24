@@ -3058,6 +3058,10 @@ zabbix_export:
             return telemetryByDeviceKey;
         }
 
+        function getEquipmentChassisMoid(inventoryObject) {
+            return (inventoryObject.EquipmentChassis && inventoryObject.EquipmentChassis.Moid) || '';
+        }
+
         function buildChassisKey(inventoryObject) {
             var domainMoid = (inventoryObject.RegisteredDevice && inventoryObject.RegisteredDevice.Moid) || '';
             var chassisId = inventoryObject.ChassisId;
@@ -3119,8 +3123,10 @@ zabbix_export:
             if (inventoryObject.OperPowerState) {
                 device.power_state = (String(inventoryObject.OperPowerState).toLowerCase() === 'on') ? 1 : 0;
             }
+            device.chassis_moid = getEquipmentChassisMoid(inventoryObject);
             device.chassis_key = buildChassisKey(inventoryObject);
-            device.is_blade = (device.chassis_key !== '' || /^UCS[BX]/.test(device.model)) ? 1 : 0;
+            device.is_blade = (device.chassis_moid !== '' || device.chassis_key !== '' ||
+                /^UCS[BX]/.test(device.model)) ? 1 : 0;
             return device;
         }
 
@@ -3158,15 +3164,19 @@ zabbix_export:
             }
         }
 
+        function isServerInChassis(server, chassis) {
+            if (server.chassis_moid !== '') { return server.chassis_moid === chassis.moid; }
+            return chassis.chassis_key !== '' && server.chassis_key === chassis.chassis_key;
+        }
+
         function attachBladesToChassis(chassisDevices, serverDevices) {
             var chassisIndex, serverIndex, chassis, server;
             for (chassisIndex = 0; chassisIndex < chassisDevices.length; chassisIndex++) {
                 chassis = chassisDevices[chassisIndex];
                 chassis.blades = [];
-                if (chassis.chassis_key === '') { continue; }
                 for (serverIndex = 0; serverIndex < serverDevices.length; serverIndex++) {
                     server = serverDevices[serverIndex];
-                    if (server.chassis_key === chassis.chassis_key) {
+                    if (isServerInChassis(server, chassis)) {
                         chassis.blades.push({ moid: server.moid, display: server.display, model: server.model });
                     }
                 }

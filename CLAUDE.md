@@ -91,13 +91,18 @@ python3 tools/check_metrics_against_doc.py <Supported_Metrices.md>
 - Appliance telemetry requires a metrics node (2- or 4-node cluster; not 3-node) or the single-node opt-in.
 - The appliance "Supported Metrics" summary doc (on-prem build 1.0.11-20261009…, checked by `tools/check_metrics_against_doc.py`) lists metric names and units but not dataSources, rollup fields or per-device support; the per-instrument pages (catalog) do. Cisco content: never commit either (`Supported_Metrices.md` is in `.gitignore`).
 
+## Checked on the user's appliance (reported by the user, 2026-11-24)
+
+- **Import into Zabbix 7.0: OK** (7.0-5 had failed with `Invalid parameter "/7/params": value is too long`, fixed in 7.0-6). Fix any future import error in the generator, not in the YAML.
+- **ECDSA speed in Duktape:** item "API: signing time (hs2019)" stays below 20,000 ms per run (13 signatures), under the 90 s run-duration trigger and the 120 s item timeout. No optimisation needed for now; if it grows: fixed-base precomputation table for G, or fewer `TELEMETRY_QUERIES`.
+- **hs2019 signing (EC P-256 mode) accepted by the appliance:** inventory is collected and "API: last errors" is empty. The signing string order is therefore right for this appliance (RSA and OAuth modes still untested).
+- **Blade↔chassis matching by `RegisteredDevice.Moid:ChassisId` FAILS:** `blades` was empty in every chassis; the user compared `chassis_key` values: the `RegisteredDevice.Moid` part differs between a blade and its chassis. Fix (not yet checked on the appliance): match on `compute.PhysicalSummary.EquipmentChassis.Moid` == chassis `Moid` (field from the Intersight API schema, CiscoDevNet/intersight-python 1.0.11.x `compute_physical_summary_all_of.py`), old key only as fallback; `servers[].chassis_moid` shows the value read. Only affects the 7.4 nested mode (`flat_servers=0`); in 7.0 all servers are discovered anyway.
+
 ## NOT verified yet (first things to check on the real system)
 
-- **Import into the user's Zabbix 7.0:** the first attempt (7.0-5) failed with `Invalid parameter "/7/params": value is too long` (script over 65,535 characters), fixed in 7.0-6. **7.0-6 has not been imported yet** (pushed at the user's request before the import test). Other import errors are still possible: fix them in the generator, not in the YAML.
-- **ECDSA speed in Duktape is unknown.** It is about 10 ms per signature on V8 and about 280 ms on V8 without JIT. There are 13 signatures per run. Watch item "API: signing time (hs2019)". If too slow: add a fixed-base precomputation table for G, or drop queries from `TELEMETRY_QUERIES`.
-- **Inventory fields** not confirmed on the appliance: FI `Version` and `OutOfBandIpAddress`, chassis `OperState`, and the blade↔chassis matching via `RegisteredDevice.Moid` + `ChassisId`.
+- **Inventory fields** not confirmed on the appliance: FI `Version` and `OutOfBandIpAddress`, chassis `OperState`.
 - **Response shapes**: list endpoints are assumed to return `{Results: [...]}` (the groupBy `[{event: {...}}]` shape is documented by the Metrics Explorer example).
-- `hw.status` is deliberately not used: its "one series per state" semantics were unclear.
+- `hw.status` is deliberately not used: its "one series per state" semantics were unclear. Left pending (user decision, 2026-11-24).
 - The OAuth mode has never run against a real Intersight.
 
 ## Open items
