@@ -34,6 +34,10 @@ HttpRequest.prototype.get = function (url) {
       RegisteredDevice: { Moid: 'reg-blade' }, EquipmentChassis: { Moid: 'c1' } },
     { Moid: 'b3', Name: 'blade-3', Model: 'UCSX-210C-M7', ChassisId: '2',
       RegisteredDevice: { Moid: 'reg-blade' }, EquipmentChassis: { Moid: 'c2' } },
+    // Only EquipmentChassis identifies it as a blade: no ChassisId and a model outside
+    // UCSB-* / UCSX-* (fixture value), so chassis_key is empty and the model rule fails.
+    { Moid: 'b5', Name: 'blade-5', Model: 'TEST-MODEL-WITHOUT-BLADE-PREFIX',
+      RegisteredDevice: { Moid: 'reg-blade' }, EquipmentChassis: { Moid: 'c2' } },
     // No EquipmentChassis: fallback key "dom-old:3" matches chassis c3.
     { Moid: 'b4', Name: 'blade-4', Model: 'UCSB-B200-M6', ChassisId: '3', RegisteredDevice: { Moid: 'dom-old' } },
     // Rack server: no chassis at all.
@@ -51,23 +55,34 @@ HttpRequest.prototype.post = function (url, body) {
 };
 const collector = new Function('value', fs.readFileSync(process.env.COLLECTOR_CODE_FILE ||
   path.join(__dirname, '..', 'src', 'collector.js'), 'utf8'));
-const output = JSON.parse(collector(toJson({ key_id: 'K', api_host: 'intersight.com',
-  private_key: ecKey.privateKey.export({ type: 'sec1', format: 'pem' }) })));
+// flatServers: value of the flat_servers item parameter ('1' = 7.0 default, '0' = 7.4 nested).
+const runCollector = flatServers => JSON.parse(collector(toJson({ key_id: 'K', api_host: 'intersight.com',
+  private_key: ecKey.privateKey.export({ type: 'sec1', format: 'pem' }), flat_servers: flatServers })));
+const flatOutput = runCollector('1');
+const nestedOutput = runCollector('0');
 
 const check = (label, condition) => {
   console.log((condition ? 'PASS ' : 'FAIL ') + label);
   if (!condition) process.exitCode = 1;
 };
-const chassisByMoid = moid => output.chassis.find(chassis => chassis.moid === moid);
+const chassisByMoid = moid => flatOutput.chassis.find(chassis => chassis.moid === moid);
 const bladeMoids = moid => chassisByMoid(moid).blades.map(blade => blade.moid).sort().join(',');
-const serverByMoid = moid => output.servers.find(server => server.moid === moid);
+const serverByMoid = moid => flatOutput.servers.find(server => server.moid === moid);
+const serverMoids = output => output.servers.map(server => server.moid).sort().join(',');
 
 check('signatures verified ' + verified.filter(Boolean).length + '/' + verified.length, verified.every(Boolean));
 check('chassis c1 holds b1,b2 through EquipmentChassis despite a different RegisteredDevice', bladeMoids('c1') === 'b1,b2');
-check('chassis c2 holds b3 only', bladeMoids('c2') === 'b3');
+check('chassis c2 holds b3,b5 (b5 known only through EquipmentChassis)', bladeMoids('c2') === 'b3,b5');
 check('chassis c3 holds b4 through the RegisteredDevice:ChassisId fallback', bladeMoids('c3') === 'b4');
 check('chassis_moid exposed on servers (empty without EquipmentChassis)',
   serverByMoid('b1').chassis_moid === 'c1' && serverByMoid('b4').chassis_moid === '' && serverByMoid('r1').chassis_moid === '');
+check('b5 (EquipmentChassis only: empty chassis_key, non-blade model) flagged is_blade=1',
+  serverByMoid('b5').chassis_key === '' && serverByMoid('b5').is_blade === 1);
 check('blades flagged is_blade=1, rack server is_blade=0',
-  ['b1', 'b2', 'b3', 'b4'].every(moid => serverByMoid(moid).is_blade === 1) && serverByMoid('r1').is_blade === 0);
-check('no errors', output.api.errors.length === 0);
+  ['b1', 'b2', 'b3', 'b4', 'b5'].every(moid => serverByMoid(moid).is_blade === 1) && serverByMoid('r1').is_blade === 0);
+check('flat_servers=1: every server in the Servers discovery', serverMoids(flatOutput) === 'b1,b2,b3,b4,b5,r1');
+check('flat_servers=0: blades (b5 included) left out of the Servers discovery, rack kept',
+  serverMoids(nestedOutput) === 'r1');
+check('flat_servers=0: blades still listed under their chassis',
+  nestedOutput.chassis.find(chassis => chassis.moid === 'c2').blades.map(blade => blade.moid).sort().join(',') === 'b3,b5');
+check('no errors', flatOutput.api.errors.length === 0 && nestedOutput.api.errors.length === 0);
