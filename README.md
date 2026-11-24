@@ -38,7 +38,7 @@ Le YAML est généré : **ne pas l'éditer à la main**. Il embarque une copie d
 
 ### Environnement de développement (bac à sable)
 
-Le dépôt fournit un devcontainer (`.devcontainer/`) : Ubuntu 24.04 avec Node 20, Python 3.12 et PyYAML 6.0.3, les mêmes versions que la CI, plus l'extension Claude Code.
+Le dépôt fournit un devcontainer (`.devcontainer/`) : Ubuntu 24.04 avec Node 20, Python 3.12 et PyYAML 6.0.4, les mêmes versions que la CI, plus l'extension Claude Code.
 
 **Avant la première ouverture, configure ta machine en suivant [docs/DEVCONTAINER_SECURITE_FR.md](docs/DEVCONTAINER_SECURITE_FR.md)** : une partie de l'isolation (identifiants git, agent SSH) ne peut pas être réglée depuis le dépôt.
 
