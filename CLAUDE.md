@@ -120,7 +120,7 @@ python3 tools/check_metrics_against_doc.py <Supported_Metrices.md>
 
 ## Repository
 
-- `cweiland/zabbix-cisco-intersight-by-api` (public). PRs #1 to #10 are merged (`git log --oneline --merges origin/main`) and none is open; CI (`tests` and CodeQL) green on `main` (GitHub API, 2026-11-24).
+- `cweiland/zabbix-cisco-intersight-by-api` (public). The state of pull requests and CI is read on GitHub (merged PRs: `git log --oneline --merges origin/main`); it is not copied here.
 - Ruleset on `main`: PR required, check `tests` required, no force push or deletion. CodeQL default setup, Dependabot, secret scanning and private vulnerability reporting are on.
 - Dependabot PRs that touch `.devcontainer/` (features, base image, PyYAML): the CI does not build the image, so the user rebuilds the container from the PR branch before merging. Action updates are covered by the CI.
 - LICENSE: AGPL-3.0-only (user decision, "like Zabbix": Zabbix headers say "version 3", no "or later"). `LICENSE` is the FSF text byte for byte (sha256 0d96a4ff...abcb0, same as gnu.org/licenses/agpl-3.0.txt and Zabbix's COPYING); never edit it.
