@@ -91,24 +91,33 @@ Object.keys(instructionFiles).forEach(function (file) {
 
 // No agent-facing file beyond those the two instruction files describe. A new one must be
 // added to both files (definition of agent-facing files) and to this test.
-const unexpectedAgentPaths = ['AGENTS.md', 'GEMINI.md', 'CLAUDE.local.md', '.claude/CLAUDE.md',
-  '.claude/rules', '.github/instructions', '.github/prompts'].filter(function (relative) {
+// Fixed paths: Copilot instruction and prompt folders, project MCP servers.
+const unexpectedAgentPaths = ['.github/instructions', '.github/prompts', '.mcp.json'].filter(function (relative) {
   return fs.existsSync(path.join(repoRoot, relative));
 });
-function findNestedClaudeFiles(relativeDir) {
+// .claude/ is an allowlist: agents, commands, skills, rules, output-styles, CLAUDE.md or any
+// other entry is a new agent-facing file (Copilot review of PR #12).
+const allowedClaudeEntries = ['settings.json', 'settings.local.json'];
+const unexpectedClaudeEntries = (fs.existsSync(path.join(repoRoot, '.claude')) ? fs.readdirSync(path.join(repoRoot, '.claude')) : [])
+  .filter(function (name) { return allowedClaudeEntries.indexOf(name) === -1; })
+  .map(function (name) { return '.claude/' + name; });
+// Instruction file names searched in the whole repository, not only at the root (Copilot
+// review of PR #12); only the root CLAUDE.md is expected.
+const agentInstructionFileNames = ['AGENTS.md', 'GEMINI.md', 'CLAUDE.local.md', 'CLAUDE.md'];
+function findAgentInstructionFiles(relativeDir) {
   let found = [];
   fs.readdirSync(path.join(repoRoot, relativeDir), { withFileTypes: true }).forEach(function (entry) {
     const relative = relativeDir ? relativeDir + '/' + entry.name : entry.name;
     if (entry.isDirectory() && entry.name !== '.git' && entry.name !== 'node_modules') {
-      found = found.concat(findNestedClaudeFiles(relative));
-    } else if (entry.isFile() && entry.name === 'CLAUDE.md' && relativeDir !== '') {
+      found = found.concat(findAgentInstructionFiles(relative));
+    } else if (agentInstructionFileNames.indexOf(entry.name) !== -1 && relative !== 'CLAUDE.md') {
       found.push(relative);
     }
   });
   return found;
 }
-const unexpectedAgentFiles = unexpectedAgentPaths.concat(findNestedClaudeFiles(''));
-check('no agent-facing file beyond CLAUDE.md, .claude/settings.json and copilot-instructions.md',
+const unexpectedAgentFiles = unexpectedAgentPaths.concat(unexpectedClaudeEntries, findAgentInstructionFiles(''));
+check('no agent-facing file beyond the root CLAUDE.md, .claude/settings.json, .claude/settings.local.json and .github/copilot-instructions.md',
   unexpectedAgentFiles.length === 0,
   'found ' + unexpectedAgentFiles.join(', ') + ': update both instruction files (CLAUDE.md and ' +
   '.github/copilot-instructions.md, agent-facing files) and this test');

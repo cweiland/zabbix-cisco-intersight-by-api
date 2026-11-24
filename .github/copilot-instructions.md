@@ -13,10 +13,11 @@ request, so the essential rules are repeated here.
   commit messages): secrets, keys, tokens, signed URLs, the user's name, e-mail, machine name,
   host paths and logs. The repository is public.
 - Agent-facing files: any file written for an agent or loaded by one. At least: `CLAUDE.md`,
-  `.claude/` (settings, rules, skills, commands, agents), `CLAUDE.local.md`; `AGENTS.md`,
-  `GEMINI.md`; `.github/copilot-instructions.md`, `.github/instructions/`, `.github/prompts/`;
-  `.vscode/`, `.devcontainer/`. Also any file imported (`@path` in a CLAUDE.md), linked or named
-  as required reading by one of them.
+  `.claude/` (settings, rules, skills, commands, agents), `CLAUDE.local.md`, `.mcp.json`
+  (project MCP servers, Claude Code doc "Project scope"); `AGENTS.md`, `GEMINI.md`;
+  `.github/copilot-instructions.md`, `.github/instructions/`, `.github/prompts/`; `.vscode/`,
+  `.devcontainer/`. Also any file imported (`@path` in a CLAUDE.md), linked or named as required
+  reading by one of them.
 - Keep the shared rules in sync: when a rule in this file, or in "Working rules" or
   "Change workflow" of `CLAUDE.md`, changes, update the other file in the same change.
 - Reviews: when reviewing a PR or a diff that touches an agent-facing file, compare the shared
