@@ -12,6 +12,19 @@ request, so the essential rules are repeated here.
 - Check every change for security problems and personal data before proposing it (code, docs,
   commit messages): secrets, keys, tokens, signed URLs, the user's name, e-mail, machine name,
   host paths and logs. The repository is public.
+- Agent-facing files: any file written for an agent or loaded by one. At least: `CLAUDE.md`,
+  `.claude/` (settings, rules, skills, commands, agents), `CLAUDE.local.md`; `AGENTS.md`,
+  `GEMINI.md`; `.github/copilot-instructions.md`, `.github/instructions/`, `.github/prompts/`;
+  `.vscode/`, `.devcontainer/`. Also any file imported (`@path` in a CLAUDE.md), linked or named
+  as required reading by one of them.
+- Keep the shared rules in sync: when a rule in this file, or in "Working rules" or
+  "Change workflow" of `CLAUDE.md`, changes, update the other file in the same change.
+- Reviews: when reviewing a PR or a diff that touches an agent-facing file, compare the shared
+  rules of `CLAUDE.md` and `.github/copilot-instructions.md` and report any difference, and any
+  new agent-facing file, import or link. Do not fix it yourself: propose the fix.
+- Human review: Copilot code review reads the instructions from the PR's head branch, not from
+  `main` (GitHub doc "Add repository instructions"). Any PR that touches an agent-facing file
+  must be reviewed by the user, not only by an assistant.
 
 ## Project rules
 
@@ -28,6 +41,9 @@ request, so the essential rules are repeated here.
 - Git is read-only in the dev container: do not commit or push; the user does it on the host. Do not
   produce patches or mbox files: edit the files, write the commit message to `.commit-msg.txt`
   (git-ignored) and give the user the branch name ("Change workflow" in `CLAUDE.md`).
+- If an edit reports an error (for example `ENOENT`), check `git diff` before retrying: on this
+  mount the write may have succeeded anyway, and a retry could apply it twice. Run `tools/ci.sh`
+  only once all edits are done, never in parallel with them.
 - Never read `params.json`, `*.pem`, `*.key` or `.env*` (credentials), by any means.
 - Never call the Dev Containers credential relay (`/tmp/vscode-remote-containers-*.js`) or
   `.devcontainer/check-host-credentials.sh`: only the user runs that check.
