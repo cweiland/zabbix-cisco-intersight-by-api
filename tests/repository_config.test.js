@@ -49,8 +49,14 @@ const copilotInstructions = read('.github/copilot-instructions.md');
 check('CLAUDE.md has the working rules (no inference, security and personal data check)',
   /## Working rules/.test(read('CLAUDE.md')) && /no inference/.test(read('CLAUDE.md')) && /personal data/.test(read('CLAUDE.md')));
 
-check('change workflow documented: commit message file is git-ignored and described in CLAUDE.md',
-  /^\.commit-msg\.txt$/m.test(read('.gitignore')) && /## Change workflow/.test(read('CLAUDE.md')) &&
+// The commit message file must be named in each place: a rename in only one of them would
+// break the workflow without failing the check (Copilot review of PR #8).
+const changeWorkflowSection = (read('CLAUDE.md').split('## Change workflow')[1] || '').split('\n## ')[0];
+check('change workflow: .commit-msg.txt is git-ignored', /^\.commit-msg\.txt$/m.test(read('.gitignore')));
+check('change workflow: CLAUDE.md section names .commit-msg.txt (message file and commit -F)',
+  changeWorkflowSection.indexOf('`.commit-msg.txt`') !== -1 &&
+  changeWorkflowSection.indexOf('git commit -F .commit-msg.txt') !== -1);
+check('change workflow: copilot-instructions.md names .commit-msg.txt',
   read('.github/copilot-instructions.md').indexOf('.commit-msg.txt') !== -1);
 
 if (failures) { console.log(failures + ' failure(s)'); }
