@@ -1,6 +1,10 @@
 # Changelog
 
 ## Non publié
+- **Unités de base uniquement** : les valeurs sont stockées en W, Wh, g et s au lieu de kWh, kg et ms, pour que Grafana et les bases de séries temporelles externes reçoivent la valeur brute. Zabbix n'ajoute les préfixes K/M/G qu'à l'affichage (« 1.5 KWh »).
+  - Énergie 24 h en `Wh` (plus de `/1000`). **Clé renommée** `intersight.energy.kwh.24h` → `intersight.energy.24h` : nouvel UUID, l'historique de l'ancien item est perdu à la réimportation.
+  - Coût : `énergie × {$INTERSIGHT.ENERGY.PRICE} / 1000` (le prix reste par kWh). CO₂ en `g` (l'intensité reste en gCO₂/kWh).
+  - Durées de l'API en secondes (unité `s`) : champs JSON `api.duration_s` et `api.sign_s` (au lieu de `duration_ms`, `sign_ms`), seuil du trigger « collector close to its 120s timeout » à 90 s. Les clés ne changent pas : l'historique existant de ces items et des totaux d'énergie, de coût et de CO₂ mélange anciennes et nouvelles unités.
 - Correctif : la liste `blades` de chaque châssis restait vide. Sur l'appliance, le `RegisteredDevice` d'une lame diffère de celui de son châssis, donc la clé `RegisteredDevice.Moid:ChassisId` ne correspondait jamais. Une lame est désormais rattachée par la relation `EquipmentChassis` de `compute.PhysicalSummary` (schéma de l'API Intersight, SDK CiscoDevNet/intersight-python) ; l'ancienne clé ne sert plus qu'en repli. Seul le mode imbriqué de Zabbix 7.4 (`flat_servers=0`) était concerné.
 - Nouveau champ `chassis_moid` sur les serveurs (Moid du châssis, vide pour un rack) ; test `tests/blade_chassis_matching.test.js`.
 

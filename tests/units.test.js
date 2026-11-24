@@ -1,4 +1,4 @@
-// Units: percentages and Zabbix display units.
+// Units: percentages, base units and Zabbix display units.
 // Intersight stores utilizations as 0-1 ratios (checked in the raw data of the user's
 // appliance), although its doc gives the unit "%". {$INTERSIGHT.PERCENT.SCALE} (default 100)
 // converts them; a wrong scale must be reported, never silently stored.
@@ -52,10 +52,22 @@ r = runCollector(0.455, 0.7, { percent_scale: '1' });
 check('percent_scale 1 on 0-1 ratios -> idle <= 1 on every FI reported as a probable ratio',
   r.errors.length === 1 && r.errors[0].includes('system.cpu.utilization_idle') && r.errors[0].includes('{$INTERSIGHT.PERCENT.SCALE}'));
 
-// Zabbix display units: "!" stops automatic K/M/G prefixes (Zabbix 7.0 "Unit symbols").
+// Base units only (user requirement): stored values must be in W, Wh, g, s, bps..., never
+// kWh, kg or ms, so that Grafana and external TSDBs get the raw value. Zabbix adds K/M/G
+// prefixes on display only (Zabbix 7.0 "Unit symbols", "Item value suffixes"). "!" stops those prefixes (Zabbix 7.0 "Unit symbols"): kept
+// for units where a prefix makes no sense (rpm, EUR).
 const yaml = fs.readFileSync(path.join(__dirname, '..', 'templates', 'zbx_intersight_templates_7.0.yaml'), 'utf8');
 const units = [...yaml.matchAll(/^\s+units: (.+)$/gm)].map(m => m[1].replace(/'/g, ''));
-const allowed = ['%', 'W', 'bps', '°C', '!rpm', '!ms', '!kWh', '!kg', '!EUR'];
+const allowed = ['%', 'W', 'Wh', 'g', 's', 'bps', '°C', '!rpm', '!EUR'];
 check(`template units are all from the reviewed list (${[...new Set(units)].sort().join(' ')})`, units.length > 0 && units.every(u => allowed.includes(u)));
-check('no bare kWh / kg / EUR / rpm / ms (would display e.g. "1.5 KkWh")', !units.some(u => ['kWh', 'kg', 'EUR', 'rpm', 'ms'].includes(u)));
+check('no prefixed unit (kWh, kg, ms, with or without "!")', !units.some(u => /^!?(k|M|G|m)(W|Wh|g|s|bps)$/.test(u)));
+check('no bare rpm / EUR (would display e.g. "1.5 Krpm")', !units.some(u => ['rpm', 'EUR'].includes(u)));
+check('energy in Wh: power average * 24, no /1000', /^\s+params: avg\(\/\/intersight\.power,24h\)\*24$/m.test(yaml) && !yaml.includes('intersight.energy.kwh'));
+const costFormulas = [...yaml.matchAll(/^\s+params: (last\(\/\/.*\{\$INTERSIGHT\.(?:ENERGY\.PRICE|CO2\.G\.KWH)\}.*)$/gm)].map(m => m[1]);
+check(`cost and CO2 divide Wh by 1000 (macros per kWh): ${costFormulas.length} formulas`, costFormulas.length >= 4 && costFormulas.every(f => f.endsWith('/1000')));
+check('API duration trigger threshold in seconds (> 90)', /intersight\.api\.duration,#3\)>90$/m.test(yaml));
+const runOutput = JSON.parse(new Function('value', code)(JSON.stringify({ key_id: 'K', private_key: ecKey.privateKey.export({ type: 'sec1', format: 'pem' }), api_host: 'intersight.com' })));
+check('collector reports API durations in seconds (duration_s, sign_s), no *_ms field',
+  typeof runOutput.api.duration_s === 'number' && typeof runOutput.api.sign_s === 'number' &&
+  runOutput.api.duration_s < 60 && !('duration_ms' in runOutput.api) && !('sign_ms' in runOutput.api));
 check('template macro {$INTERSIGHT.PERCENT.SCALE} defaults to 100', /macro: '\{\$INTERSIGHT\.PERCENT\.SCALE\}'\n\s+value: '100'/.test(yaml));

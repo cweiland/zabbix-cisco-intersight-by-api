@@ -255,14 +255,14 @@ zabbix_export:
         value: network
       - tag: class
         value: server
-    - uuid: 28d3c195db444aed9f6b779a55497923
+    - uuid: e36bb0d506d14100b55cd9bc26c774e4
       name: 'Energy: last 24h'
       type: CALCULATED
-      key: intersight.energy.kwh.24h
+      key: intersight.energy.24h
       delay: 1h
       value_type: FLOAT
-      params: avg(//intersight.power,24h)*24/1000
-      units: '!kWh'
+      params: avg(//intersight.power,24h)*24
+      units: Wh
       tags:
       - tag: component
         value: energy
@@ -1067,14 +1067,14 @@ zabbix_export:
         value: network
       - tag: class
         value: chassis
-    - uuid: 5ac324a6becf4702a5e6062703528291
+    - uuid: 7be5deade72a4e36b4b8020a1b72ebdc
       name: 'Energy: last 24h'
       type: CALCULATED
-      key: intersight.energy.kwh.24h
+      key: intersight.energy.24h
       delay: 1h
       value_type: FLOAT
-      params: avg(//intersight.power,24h)*24/1000
-      units: '!kWh'
+      params: avg(//intersight.power,24h)*24
+      units: Wh
       tags:
       - tag: component
         value: energy
@@ -1665,14 +1665,14 @@ zabbix_export:
         value: network
       - tag: class
         value: fi
-    - uuid: cc27a5eb50f04d24a63da32d800ea1aa
+    - uuid: 88cfc741fb4c49e4b17247216af0dc02
       name: 'Energy: last 24h'
       type: CALCULATED
-      key: intersight.energy.kwh.24h
+      key: intersight.energy.24h
       delay: 1h
       value_type: FLOAT
-      params: avg(//intersight.power,24h)*24/1000
-      units: '!kWh'
+      params: avg(//intersight.power,24h)*24
+      units: Wh
       tags:
       - tag: component
         value: energy
@@ -3294,8 +3294,8 @@ zabbix_export:
             api: {
                 calls: apiCallCount,
                 errors: collectedErrors,
-                duration_ms: new Date().getTime() - runStartTime,
-                sign_ms: signingTimeMs
+                duration_s: (new Date().getTime() - runStartTime) / 1000,
+                sign_s: signingTimeMs / 1000
             },
             counts: {
                 servers: serverDevices.length,
@@ -3410,18 +3410,18 @@ zabbix_export:
       value_type: FLOAT
       master_item:
         key: intersight.collect
-      units: '!ms'
+      units: s
       preprocessing:
       - type: JSONPATH
         parameters:
-        - $.api.duration_ms
+        - $.api.duration_s
         error_handler: DISCARD_VALUE
       tags:
       - tag: component
         value: health
       triggers:
       - uuid: 956c1d0fca624504abf2b9c6c12c3a85
-        expression: min(/Cisco Intersight by API/intersight.api.duration,#3)>90000
+        expression: min(/Cisco Intersight by API/intersight.api.duration,#3)>90
         name: 'Intersight: collector close to its 120s timeout'
         priority: WARNING
         description: 'Check "API: signing time" (ECDSA in pure JS) and the Intersight API latency.'
@@ -3432,11 +3432,11 @@ zabbix_export:
       value_type: FLOAT
       master_item:
         key: intersight.collect
-      units: '!ms'
+      units: s
       preprocessing:
       - type: JSONPATH
         parameters:
-        - $.api.sign_ms
+        - $.api.sign_s
         error_handler: DISCARD_VALUE
       tags:
       - tag: component
@@ -3584,8 +3584,8 @@ zabbix_export:
       key: intersight.total.energy[Servers]
       delay: 1h
       value_type: FLOAT
-      params: sum(last_foreach(/*/intersight.energy.kwh.24h?[group="Intersight/Servers"]))
-      units: '!kWh'
+      params: sum(last_foreach(/*/intersight.energy.24h?[group="Intersight/Servers"]))
+      units: Wh
       tags:
       - tag: component
         value: aggregate
@@ -3595,7 +3595,7 @@ zabbix_export:
       key: intersight.total.cost[Servers]
       delay: 1h
       value_type: FLOAT
-      params: last(//intersight.total.energy[Servers])*{$INTERSIGHT.ENERGY.PRICE}
+      params: last(//intersight.total.energy[Servers])*{$INTERSIGHT.ENERGY.PRICE}/1000
       units: '!EUR'
       tags:
       - tag: component
@@ -3607,7 +3607,7 @@ zabbix_export:
       delay: 1h
       value_type: FLOAT
       params: last(//intersight.total.energy[Servers])*{$INTERSIGHT.CO2.G.KWH}/1000
-      units: '!kg'
+      units: g
       tags:
       - tag: component
         value: aggregate
@@ -3628,8 +3628,8 @@ zabbix_export:
       key: intersight.total.energy[Chassis]
       delay: 1h
       value_type: FLOAT
-      params: sum(last_foreach(/*/intersight.energy.kwh.24h?[group="Intersight/Chassis"]))
-      units: '!kWh'
+      params: sum(last_foreach(/*/intersight.energy.24h?[group="Intersight/Chassis"]))
+      units: Wh
       tags:
       - tag: component
         value: aggregate
@@ -3639,7 +3639,7 @@ zabbix_export:
       key: intersight.total.cost[Chassis]
       delay: 1h
       value_type: FLOAT
-      params: last(//intersight.total.energy[Chassis])*{$INTERSIGHT.ENERGY.PRICE}
+      params: last(//intersight.total.energy[Chassis])*{$INTERSIGHT.ENERGY.PRICE}/1000
       units: '!EUR'
       tags:
       - tag: component
@@ -3651,7 +3651,7 @@ zabbix_export:
       delay: 1h
       value_type: FLOAT
       params: last(//intersight.total.energy[Chassis])*{$INTERSIGHT.CO2.G.KWH}/1000
-      units: '!kg'
+      units: g
       tags:
       - tag: component
         value: aggregate
@@ -3672,8 +3672,8 @@ zabbix_export:
       key: intersight.total.energy[FI]
       delay: 1h
       value_type: FLOAT
-      params: sum(last_foreach(/*/intersight.energy.kwh.24h?[group="Intersight/FI"]))
-      units: '!kWh'
+      params: sum(last_foreach(/*/intersight.energy.24h?[group="Intersight/FI"]))
+      units: Wh
       tags:
       - tag: component
         value: aggregate
@@ -3683,7 +3683,7 @@ zabbix_export:
       key: intersight.total.cost[FI]
       delay: 1h
       value_type: FLOAT
-      params: last(//intersight.total.energy[FI])*{$INTERSIGHT.ENERGY.PRICE}
+      params: last(//intersight.total.energy[FI])*{$INTERSIGHT.ENERGY.PRICE}/1000
       units: '!EUR'
       tags:
       - tag: component
@@ -3695,7 +3695,7 @@ zabbix_export:
       delay: 1h
       value_type: FLOAT
       params: last(//intersight.total.energy[FI])*{$INTERSIGHT.CO2.G.KWH}/1000
-      units: '!kg'
+      units: g
       tags:
       - tag: component
         value: aggregate
@@ -3912,8 +3912,8 @@ zabbix_export:
         key: intersight.model.energy[{#CLASS},{#MODEL}]
         delay: 1h
         value_type: FLOAT
-        params: sum(last_foreach(/*/intersight.energy.kwh.24h?[group="{#GROUP}"]))
-        units: '!kWh'
+        params: sum(last_foreach(/*/intersight.energy.24h?[group="{#GROUP}"]))
+        units: Wh
         tags:
         - tag: component
           value: aggregate
@@ -3927,7 +3927,7 @@ zabbix_export:
         key: intersight.model.cost[{#CLASS},{#MODEL}]
         delay: 1h
         value_type: FLOAT
-        params: last(//intersight.model.energy[{#CLASS},{#MODEL}])*{$INTERSIGHT.ENERGY.PRICE}
+        params: last(//intersight.model.energy[{#CLASS},{#MODEL}])*{$INTERSIGHT.ENERGY.PRICE}/1000
         units: '!EUR'
         tags:
         - tag: component
@@ -3943,7 +3943,7 @@ zabbix_export:
         delay: 1h
         value_type: FLOAT
         params: last(//intersight.model.energy[{#CLASS},{#MODEL}])*{$INTERSIGHT.CO2.G.KWH}/1000
-        units: '!kg'
+        units: g
         tags:
         - tag: component
           value: aggregate

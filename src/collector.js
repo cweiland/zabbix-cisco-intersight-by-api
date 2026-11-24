@@ -49,7 +49,7 @@
  *      ports [ {name, role, rx_bps, tx_bps, speed_bps, util, up, errors} ]  (bits per second),
  *      blades [ {moid, display, model} ]   (chassis only)
  *    Returned document:
- *      ts, api {calls, errors[], duration_ms, sign_ms}, counts {servers, chassis, fi},
+ *      ts, api {calls, errors[], duration_s, sign_s}, counts {servers, chassis, fi},
  *      alarms {critical, warning, info}, push {enabled, sent, failed},
  *      servers[], chassis[], fis[], models [ {class, model, group} ]
  *
@@ -1499,8 +1499,9 @@ return JSON.stringify({
     api: {
         calls: apiCallCount,
         errors: collectedErrors,
-        duration_ms: new Date().getTime() - runStartTime,
-        sign_ms: signingTimeMs
+        // Seconds (base unit), not ms: the history and external tools get base units.
+        duration_s: (new Date().getTime() - runStartTime) / 1000,
+        sign_s: signingTimeMs / 1000
     },
     counts: {
         servers: serverDevices.length,
