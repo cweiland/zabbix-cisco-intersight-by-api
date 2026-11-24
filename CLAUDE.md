@@ -22,6 +22,8 @@ The workspace is shared with the host: every edit you make is already in the use
    `git switch -c <branch>` / `git status` and `git diff` (review) / `git add -A` / `git commit -F .commit-msg.txt` / `git push -u origin <branch>`, then the pull request on GitHub.
 5. One change at a time: wait until the user has committed before starting the next one.
 
+If an edit reports an error (for example `ENOENT`), check `git diff` before retrying: on this mount the write may have succeeded anyway, and a retry could apply it twice. Run `tools/ci.sh` only once all edits are done, never in parallel with them.
+
 Never ask for `.git` to become writable or to commit from the container: a writable `.git` (`commondir`, hooks, config) lets the container run commands through git on the host.
 
 ## User environment (hard constraints)
@@ -118,11 +120,16 @@ python3 tools/check_metrics_against_doc.py <Supported_Metrices.md>
 - `hw.status` is deliberately not used: its "one series per state" semantics were unclear. Left pending (user decision, 2026-11-24).
 - The OAuth mode has never run against a real Intersight.
 
-## Open items
+## Repository
 
-- Repository: `cweiland/zabbix-cisco-intersight-by-api` (public). PR #1 (dev container) and #2 (Dependabot, Node feature 2.1.2) merged; CI green on `main`. Main ruleset: PR required, check `tests` required, no force push or deletion. CodeQL default setup, Dependabot, secret scanning and private vulnerability reporting are on.
+- `cweiland/zabbix-cisco-intersight-by-api` (public). The state of pull requests and CI is read on GitHub (merged PRs: `git log --oneline --merges origin/main`); it is not copied here.
+- Ruleset on `main`: PR required, check `tests` required, no force push or deletion. CodeQL default setup, Dependabot, secret scanning and private vulnerability reporting are on.
 - Dependabot PRs that touch `.devcontainer/` (features, base image, PyYAML): the CI does not build the image, so the user rebuilds the container from the PR branch before merging. Action updates are covered by the CI.
 - LICENSE: AGPL-3.0-only (user decision, "like Zabbix": Zabbix headers say "version 3", no "or later"). `LICENSE` is the FSF text byte for byte (sha256 0d96a4ff...abcb0, same as gnu.org/licenses/agpl-3.0.txt and Zabbix's COPYING); never edit it.
+
+## Open items
+
+- Unreleased changes: `CHANGELOG.md` has a "Non publié" section (blade↔chassis fix) while the template version is still `7.0-6` (`tools/generate_templates.py`). Releasing it (version number) is the user's decision.
 - Optional metrics not collected: GPU (`hw.gpu.*`), voltage, current, optical signal power, detailed packet counters.
 
 ## Testing conventions
