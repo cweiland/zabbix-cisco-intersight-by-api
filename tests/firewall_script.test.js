@@ -350,6 +350,12 @@ check('.vscode exists in the repository (a bind mount needs an existing source)'
 // (Anthropic's reference devcontainer.json sets it to the volume path).
 check('CLAUDE_CONFIG_DIR points to the Claude Code volume',
   (devcontainer.containerEnv || {}).CLAUDE_CONFIG_DIR === '/home/vscode/.claude');
+// git status / diff / log in the container: only the workspace folder is a safe.directory.
+check('safe.directory: build argument from the local folder name, then the exact folder (not "*")',
+  ((devcontainer.build || {}).args || {}).WORKSPACE_FOLDER_NAME === '${localWorkspaceFolderBasename}' &&
+  /^ARG WORKSPACE_FOLDER_NAME$/m.test(dockerfile) &&
+  dockerfile.indexOf('git config --system --add safe.directory "/workspaces/$WORKSPACE_FOLDER_NAME"') !== -1 &&
+  !/safe\.directory ["']?\*/.test(dockerfile));
 // Supply chain and privileges (anticipated review points).
 check('base image pinned by digest', /^FROM mcr\.microsoft\.com\/devcontainers\/base:ubuntu-24\.04@sha256:[0-9a-f]{64}$/m.test(dockerfile));
 check('Python dependencies installed with --require-hashes (dev container and CI)',

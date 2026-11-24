@@ -1,6 +1,9 @@
 {
   "name": "zabbix-cisco-intersight",
-  "build": { "dockerfile": "Dockerfile" },
+  "build": {
+    "dockerfile": "Dockerfile",
+    "args": { "WORKSPACE_FOLDER_NAME": "${localWorkspaceFolderBasename}" }
+  },
   "features": {
     "ghcr.io/devcontainers/features/node:2": { "version": "20" }
   },

@@ -35,6 +35,15 @@ RUN chmod 0755 /usr/local/bin/intersight-init-firewall.sh /usr/local/bin/intersi
 # included) needs root, and nothing can change the firewall rules.
 RUN rm -f /etc/sudoers.d/vscode
 
+# Read-only git commands in the container (git status, git diff, git log): the workspace belongs
+# to the host user, not to "vscode", so git refuses it ("detected dubious ownership"). The Dev
+# Containers extension adds this entry itself at some starts, not all (user's logs of 2026-11-20
+# and 2026-11-24). Only this folder is trusted, not "*": its .git belongs to the host user and is
+# mounted read-only. Mount point: /workspaces/<local folder name> (seen in the user's logs).
+ARG WORKSPACE_FOLDER_NAME
+RUN test -n "$WORKSPACE_FOLDER_NAME" \
+ && git config --system --add safe.directory "/workspaces/$WORKSPACE_FOLDER_NAME"
+
 # Mount point of the Claude Code volume (devcontainer.json "mounts"), owned by "vscode" as in
 # Anthropic's reference Dockerfile: a new, empty named volume takes the ownership of the image
 # directory it is mounted on, so without it the volume would belong to root.
