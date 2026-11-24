@@ -59,5 +59,76 @@ check('change workflow: CLAUDE.md section names .commit-msg.txt (message file an
 check('change workflow: copilot-instructions.md names .commit-msg.txt',
   read('.github/copilot-instructions.md').indexOf('.commit-msg.txt') !== -1);
 
+// Shared rules of the two instruction files. Whitespace is collapsed first, so that a line
+// break inside a sentence of copilot-instructions.md (wrapped text) does not hide it.
+function collapseWhitespace(text) { return text.replace(/\s+/g, ' '); }
+function markdownSection(text, heading) { return (text.split('## ' + heading)[1] || '').split('\n## ')[0]; }
+const claudeInstructions = read('CLAUDE.md');
+const instructionFiles = { 'CLAUDE.md': claudeInstructions, '.github/copilot-instructions.md': copilotInstructions };
+
+check('change workflow: CLAUDE.md says to check `git diff` before retrying a failed edit',
+  collapseWhitespace(changeWorkflowSection).indexOf('`git diff` before retrying') !== -1);
+check('change workflow: copilot-instructions.md says to check `git diff` before retrying a failed edit',
+  collapseWhitespace(copilotInstructions).indexOf('`git diff` before retrying') !== -1);
+
+// The sync rule is the "Working rules" bullet that contains "in the same change"; each file's
+// rule must name the other file, otherwise a change in one would not lead to the other.
+function syncRule(text) {
+  const bullets = markdownSection(text, 'Working rules').split('\n- ');
+  return collapseWhitespace(bullets.filter(function (bullet) { return bullet.indexOf('in the same change') !== -1; })[0] || '');
+}
+check('sync rule of CLAUDE.md names .github/copilot-instructions.md',
+  syncRule(claudeInstructions).indexOf('`.github/copilot-instructions.md`') !== -1, syncRule(claudeInstructions));
+check('sync rule of copilot-instructions.md names CLAUDE.md',
+  syncRule(copilotInstructions).indexOf('`CLAUDE.md`') !== -1, syncRule(copilotInstructions));
+
+Object.keys(instructionFiles).forEach(function (file) {
+  const workingRules = collapseWhitespace(markdownSection(instructionFiles[file], 'Working rules'));
+  ['agent-facing file', 'compare the shared rules', 'head branch'].forEach(function (phrase) {
+    check(file + ' "Working rules" states: ' + phrase, workingRules.indexOf(phrase) !== -1);
+  });
+});
+
+// No agent-facing file beyond those the two instruction files describe. A new one must be
+// added to both files (definition of agent-facing files) and to this test.
+// Fixed paths: Copilot instruction and prompt folders, project MCP servers.
+const unexpectedAgentPaths = ['.github/instructions', '.github/prompts', '.mcp.json'].filter(function (relative) {
+  return fs.existsSync(path.join(repoRoot, relative));
+});
+// .claude/ is an allowlist: agents, commands, skills, rules, output-styles, CLAUDE.md or any
+// other entry is a new agent-facing file (Copilot review of PR #12).
+const allowedClaudeEntries = ['settings.json', 'settings.local.json'];
+const unexpectedClaudeEntries = (fs.existsSync(path.join(repoRoot, '.claude')) ? fs.readdirSync(path.join(repoRoot, '.claude')) : [])
+  .filter(function (name) { return allowedClaudeEntries.indexOf(name) === -1; })
+  .map(function (name) { return '.claude/' + name; });
+// Instruction file names searched in the whole repository, not only at the root (Copilot
+// review of PR #12); only the root CLAUDE.md is expected.
+const agentInstructionFileNames = ['AGENTS.md', 'GEMINI.md', 'CLAUDE.local.md', 'CLAUDE.md'];
+function findAgentInstructionFiles(relativeDir) {
+  let found = [];
+  fs.readdirSync(path.join(repoRoot, relativeDir), { withFileTypes: true }).forEach(function (entry) {
+    const relative = relativeDir ? relativeDir + '/' + entry.name : entry.name;
+    if (entry.isDirectory() && entry.name !== '.git' && entry.name !== 'node_modules') {
+      found = found.concat(findAgentInstructionFiles(relative));
+    } else if (agentInstructionFileNames.indexOf(entry.name) !== -1 && relative !== 'CLAUDE.md') {
+      found.push(relative);
+    }
+  });
+  return found;
+}
+const unexpectedAgentFiles = unexpectedAgentPaths.concat(unexpectedClaudeEntries, findAgentInstructionFiles(''));
+check('no agent-facing file beyond the root CLAUDE.md, .claude/settings.json, .claude/settings.local.json and .github/copilot-instructions.md',
+  unexpectedAgentFiles.length === 0,
+  'found ' + unexpectedAgentFiles.join(', ') + ': update both instruction files (CLAUDE.md and ' +
+  '.github/copilot-instructions.md, agent-facing files) and this test');
+
+// Claude Code imports "@path" files from CLAUDE.md (outside code spans and code blocks);
+// an import would load a file that the review rules do not cover.
+function textOutsideCode(text) { return text.replace(/```[\s\S]*?```/g, '').replace(/`[^`\n]*`/g, ''); }
+Object.keys(instructionFiles).forEach(function (file) {
+  const imports = textOutsideCode(instructionFiles[file]).match(/(^|\s)@[\w.~\/-]+/g) || [];
+  check(file + ': no @path import outside code', imports.length === 0, imports.join(' '));
+});
+
 if (failures) { console.log(failures + ' failure(s)'); }
 process.exitCode = failures ? 1 : 0;

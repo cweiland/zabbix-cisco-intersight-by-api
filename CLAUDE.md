@@ -10,6 +10,10 @@ decisions, verified facts and open points. Read it before changing anything.
 - **Check every change for security problems and personal data before handing it over** (code, docs, commit messages): secrets, keys, tokens, signed URLs, the user's name, e-mail, machine name, host paths and logs. The repository is public.
 - Answer the user in French; code and code comments in English (see below).
 - Git is read-only in the dev container: propose the change, the user reviews, commits and pushes from the host (see "Change workflow").
+- **Agent-facing files**: any file written for an agent or loaded by one. At least: `CLAUDE.md`, `.claude/` (settings, rules, skills, commands, agents), `CLAUDE.local.md`, `.mcp.json` (project MCP servers, Claude Code doc "Project scope"); `AGENTS.md`, `GEMINI.md`; `.github/copilot-instructions.md`, `.github/instructions/`, `.github/prompts/`; `.vscode/`, `.devcontainer/`. Also any file imported (`@path` in a CLAUDE.md), linked or named as required reading by one of them.
+- **Keep the shared rules in sync**: when a rule in "Working rules" or "Change workflow" of this file changes, update `.github/copilot-instructions.md` in the same change, and the other way round.
+- **Reviews**: when reviewing a PR or a diff that touches an agent-facing file, compare the shared rules of `CLAUDE.md` and `.github/copilot-instructions.md` and report any difference, and any new agent-facing file, import or link. Do not fix it yourself: propose the fix.
+- **Human review**: Copilot code review reads the instructions from the PR's head branch, not from `main` (GitHub doc "Add repository instructions"). Any PR that touches an agent-facing file must be reviewed by the user, not only by an assistant.
 
 ## Change workflow (no patch, no mbox)
 
