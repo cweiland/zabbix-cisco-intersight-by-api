@@ -34,7 +34,10 @@
         "anthropic.claude-code",
         "redhat.vscode-yaml",
         "ms-python.python"
-      ]
+      ],
+      "settings": {
+        "python.defaultInterpreterPath": "/opt/venv/bin/python"
+      }
     }
   }
 }
