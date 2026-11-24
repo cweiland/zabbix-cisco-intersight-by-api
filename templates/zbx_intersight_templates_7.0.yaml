@@ -3403,10 +3403,10 @@ zabbix_export:
       tags:
       - tag: component
         value: health
-    - uuid: b697d26fcdc746bb99f3c71dc1bca81b
+    - uuid: 27a7c7424ec042c983410c4f62a11532
       name: 'API: run duration'
       type: DEPENDENT
-      key: intersight.api.duration
+      key: intersight.api.run.time
       value_type: FLOAT
       master_item:
         key: intersight.collect
@@ -3421,14 +3421,14 @@ zabbix_export:
         value: health
       triggers:
       - uuid: 956c1d0fca624504abf2b9c6c12c3a85
-        expression: min(/Cisco Intersight by API/intersight.api.duration,#3)>90
+        expression: min(/Cisco Intersight by API/intersight.api.run.time,#3)>90
         name: 'Intersight: collector close to its 120s timeout'
         priority: WARNING
         description: 'Check "API: signing time" (ECDSA in pure JS) and the Intersight API latency.'
-    - uuid: 4d254c193ef142d385098d644018f40d
+    - uuid: d0b99f68c51e40758e5a8fbbc648a788
       name: 'API: signing time (hs2019)'
       type: DEPENDENT
-      key: intersight.api.sign
+      key: intersight.api.sign.time
       value_type: FLOAT
       master_item:
         key: intersight.collect
@@ -3578,10 +3578,10 @@ zabbix_export:
       tags:
       - tag: component
         value: aggregate
-    - uuid: 66a5c900e6794dd180535b4ab8ccd73b
+    - uuid: c061e3e11e46465f83af198c97cd3d78
       name: 'Servers: energy last 24h'
       type: CALCULATED
-      key: intersight.total.energy[Servers]
+      key: intersight.total.energy.24h[Servers]
       delay: 1h
       value_type: FLOAT
       params: sum(last_foreach(/*/intersight.energy.24h?[group="Intersight/Servers"]))
@@ -3595,18 +3595,18 @@ zabbix_export:
       key: intersight.total.cost[Servers]
       delay: 1h
       value_type: FLOAT
-      params: last(//intersight.total.energy[Servers])*{$INTERSIGHT.ENERGY.PRICE}/1000
+      params: last(//intersight.total.energy.24h[Servers])*{$INTERSIGHT.ENERGY.PRICE}/1000
       units: '!EUR'
       tags:
       - tag: component
         value: aggregate
-    - uuid: 1d62e0633c0e4a3598b46ccc0174e0e4
+    - uuid: c7c8a9cf79814d4b90c9220b92fa3168
       name: 'Servers: CO2 last 24h'
       type: CALCULATED
-      key: intersight.total.co2[Servers]
+      key: intersight.total.co2.24h[Servers]
       delay: 1h
       value_type: FLOAT
-      params: last(//intersight.total.energy[Servers])*{$INTERSIGHT.CO2.G.KWH}/1000
+      params: last(//intersight.total.energy.24h[Servers])*{$INTERSIGHT.CO2.G.KWH}/1000
       units: g
       tags:
       - tag: component
@@ -3622,10 +3622,10 @@ zabbix_export:
       tags:
       - tag: component
         value: aggregate
-    - uuid: 11d37d62593d4dde99a44f990d078994
+    - uuid: 5c953816708d4c9f9d01bbe443610b32
       name: 'Chassis: energy last 24h'
       type: CALCULATED
-      key: intersight.total.energy[Chassis]
+      key: intersight.total.energy.24h[Chassis]
       delay: 1h
       value_type: FLOAT
       params: sum(last_foreach(/*/intersight.energy.24h?[group="Intersight/Chassis"]))
@@ -3639,18 +3639,18 @@ zabbix_export:
       key: intersight.total.cost[Chassis]
       delay: 1h
       value_type: FLOAT
-      params: last(//intersight.total.energy[Chassis])*{$INTERSIGHT.ENERGY.PRICE}/1000
+      params: last(//intersight.total.energy.24h[Chassis])*{$INTERSIGHT.ENERGY.PRICE}/1000
       units: '!EUR'
       tags:
       - tag: component
         value: aggregate
-    - uuid: 099222691e314e91b3e77536b390c80b
+    - uuid: c53c74ab8f1b49b2b370a3794d73efc5
       name: 'Chassis: CO2 last 24h'
       type: CALCULATED
-      key: intersight.total.co2[Chassis]
+      key: intersight.total.co2.24h[Chassis]
       delay: 1h
       value_type: FLOAT
-      params: last(//intersight.total.energy[Chassis])*{$INTERSIGHT.CO2.G.KWH}/1000
+      params: last(//intersight.total.energy.24h[Chassis])*{$INTERSIGHT.CO2.G.KWH}/1000
       units: g
       tags:
       - tag: component
@@ -3666,10 +3666,10 @@ zabbix_export:
       tags:
       - tag: component
         value: aggregate
-    - uuid: b7540655a4fb447185b50114aafec837
+    - uuid: bdd4e53a81114deb882b582ccd6f1cf2
       name: 'FI: energy last 24h'
       type: CALCULATED
-      key: intersight.total.energy[FI]
+      key: intersight.total.energy.24h[FI]
       delay: 1h
       value_type: FLOAT
       params: sum(last_foreach(/*/intersight.energy.24h?[group="Intersight/FI"]))
@@ -3683,18 +3683,18 @@ zabbix_export:
       key: intersight.total.cost[FI]
       delay: 1h
       value_type: FLOAT
-      params: last(//intersight.total.energy[FI])*{$INTERSIGHT.ENERGY.PRICE}/1000
+      params: last(//intersight.total.energy.24h[FI])*{$INTERSIGHT.ENERGY.PRICE}/1000
       units: '!EUR'
       tags:
       - tag: component
         value: aggregate
-    - uuid: 4537f1aa919a40b8949c7feff4670798
+    - uuid: 4272d74502904292a3ee6ccedd9d6494
       name: 'FI: CO2 last 24h'
       type: CALCULATED
-      key: intersight.total.co2[FI]
+      key: intersight.total.co2.24h[FI]
       delay: 1h
       value_type: FLOAT
-      params: last(//intersight.total.energy[FI])*{$INTERSIGHT.CO2.G.KWH}/1000
+      params: last(//intersight.total.energy.24h[FI])*{$INTERSIGHT.CO2.G.KWH}/1000
       units: g
       tags:
       - tag: component
@@ -3906,10 +3906,10 @@ zabbix_export:
           value: '{#CLASS}'
         - tag: model
           value: '{#MODEL}'
-      - uuid: 6243a4c3871d450cb033b92ef9d28dc7
+      - uuid: bf1ef1feea364823948eb4e423dbfe7b
         name: '{#CLASS} {#MODEL}: energy last 24h'
         type: CALCULATED
-        key: intersight.model.energy[{#CLASS},{#MODEL}]
+        key: intersight.model.energy.24h[{#CLASS},{#MODEL}]
         delay: 1h
         value_type: FLOAT
         params: sum(last_foreach(/*/intersight.energy.24h?[group="{#GROUP}"]))
@@ -3927,7 +3927,7 @@ zabbix_export:
         key: intersight.model.cost[{#CLASS},{#MODEL}]
         delay: 1h
         value_type: FLOAT
-        params: last(//intersight.model.energy[{#CLASS},{#MODEL}])*{$INTERSIGHT.ENERGY.PRICE}/1000
+        params: last(//intersight.model.energy.24h[{#CLASS},{#MODEL}])*{$INTERSIGHT.ENERGY.PRICE}/1000
         units: '!EUR'
         tags:
         - tag: component
@@ -3936,13 +3936,13 @@ zabbix_export:
           value: '{#CLASS}'
         - tag: model
           value: '{#MODEL}'
-      - uuid: f4966134298b4212a42cad81ce7da6eb
+      - uuid: 073dd7f4e7f04aada842c0eab792bd40
         name: '{#CLASS} {#MODEL}: CO2 last 24h'
         type: CALCULATED
-        key: intersight.model.co2[{#CLASS},{#MODEL}]
+        key: intersight.model.co2.24h[{#CLASS},{#MODEL}]
         delay: 1h
         value_type: FLOAT
-        params: last(//intersight.model.energy[{#CLASS},{#MODEL}])*{$INTERSIGHT.CO2.G.KWH}/1000
+        params: last(//intersight.model.energy.24h[{#CLASS},{#MODEL}])*{$INTERSIGHT.CO2.G.KWH}/1000
         units: g
         tags:
         - tag: component

@@ -65,7 +65,16 @@ check('no bare rpm / EUR (would display e.g. "1.5 Krpm")', !units.some(u => ['rp
 check('energy in Wh: power average * 24, no /1000', /^\s+params: avg\(\/\/intersight\.power,24h\)\*24$/m.test(yaml) && !yaml.includes('intersight.energy.kwh'));
 const costFormulas = [...yaml.matchAll(/^\s+params: (last\(\/\/.*\{\$INTERSIGHT\.(?:ENERGY\.PRICE|CO2\.G\.KWH)\}.*)$/gm)].map(m => m[1]);
 check(`cost and CO2 divide Wh by 1000 (macros per kWh): ${costFormulas.length} formulas`, costFormulas.length >= 4 && costFormulas.every(f => f.endsWith('/1000')));
-check('API duration trigger threshold in seconds (> 90)', /intersight\.api\.duration,#3\)>90$/m.test(yaml));
+check('API duration trigger threshold in seconds (> 90)', /intersight\.api\.run\.time,#3\)>90$/m.test(yaml));
+// A unit change must come with a new key (new UUID): otherwise the old history (kWh, kg, ms)
+// would be read in the new unit, and calculations could read a last value in the old unit.
+const keys = [...yaml.matchAll(/^\s+key: (.+)$/gm)].map(m => m[1].replace(/'/g, ''));
+const oldKeys = ['intersight.energy.kwh.24h', 'intersight.api.duration', 'intersight.api.sign',
+  'intersight.total.energy[', 'intersight.total.co2[', 'intersight.model.energy[', 'intersight.model.co2['];
+check('keys whose unit changed are renamed (no kWh / kg / ms history reused)',
+  !keys.some(k => oldKeys.some(o => o.endsWith('[') ? k.startsWith(o) : k === o)) &&
+  ['intersight.api.run.time', 'intersight.api.sign.time', 'intersight.total.energy.24h[Servers]', 'intersight.total.co2.24h[FI]',
+   'intersight.model.energy.24h[{#CLASS},{#MODEL}]', 'intersight.model.co2.24h[{#CLASS},{#MODEL}]'].every(k => keys.includes(k)));
 const runOutput = JSON.parse(new Function('value', code)(JSON.stringify({ key_id: 'K', private_key: ecKey.privateKey.export({ type: 'sec1', format: 'pem' }), api_host: 'intersight.com' })));
 check('collector reports API durations in seconds (duration_s, sign_s), no *_ms field',
   typeof runOutput.api.duration_s === 'number' && typeof runOutput.api.sign_s === 'number' &&
