@@ -39,5 +39,15 @@ check('LICENSE is the unchanged AGPL-3.0 text from gnu.org',
   licenseHash === '0d96a4ff68ad6d4b6f1f30f713b18d5184912ba8dd389f86aa7710db079abcb0', licenseHash);
 check('README states AGPL-3.0-only', /AGPL-3\.0-only/.test(read('README.md')));
 
+// The assistants' instruction files carry the essential rules themselves (VS Code does not
+// guarantee that a file linked from an instructions file reaches every request).
+const copilotInstructions = read('.github/copilot-instructions.md');
+['no inference', 'personal data', 'ES5', 'never edit it by hand', 'docs/intersight_metrics.json',
+ 'tools/ci.sh', 'Git is read-only', 'params.json', 'check-host-credentials.sh'].forEach(function (rule) {
+  check('copilot-instructions.md states: ' + rule, copilotInstructions.indexOf(rule) !== -1);
+});
+check('CLAUDE.md has the working rules (no inference, security and personal data check)',
+  /## Working rules/.test(read('CLAUDE.md')) && /no inference/.test(read('CLAUDE.md')) && /personal data/.test(read('CLAUDE.md')));
+
 if (failures) { console.log(failures + ' failure(s)'); }
 process.exitCode = failures ? 1 : 0;

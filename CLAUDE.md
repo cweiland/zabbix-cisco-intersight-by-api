@@ -4,6 +4,13 @@ Zabbix templates that monitor Cisco Intersight: servers, chassis, Fabric Interco
 This project was designed in a claude.ai conversation. This file carries over its
 decisions, verified facts and open points. Read it before changing anything.
 
+## Working rules (user requirements, apply to every answer and change)
+
+- **Only justified, verified answers: no inference, no assumption.** Back every claim with a source (official doc, code, test, log, command output) and say plainly when something is not verified. Show the reasoning first, then the answer.
+- **Check every change for security problems and personal data before handing it over** (code, docs, commit messages): secrets, keys, tokens, signed URLs, the user's name, e-mail, machine name, host paths and logs. The repository is public.
+- Answer the user in French; code and code comments in English (see below).
+- Git is read-only in the dev container: propose the change, the user reviews, commits and pushes from the host.
+
 ## User environment (hard constraints)
 
 - **Zabbix 7.0.x LTS** is the target. 7.4 is supported only through the manual steps in `docs/UPGRADE_7.4_FR.md`.
@@ -95,7 +102,8 @@ python3 tools/check_metrics_against_doc.py <Supported_Metrices.md>
 
 ## Open items
 
-- Repository: `cweiland/zabbix-cisco-intersight-by-api` (public since the user made it so). First pushed from claude.ai through the GitHub connector; check that the CI workflow passes.
+- Repository: `cweiland/zabbix-cisco-intersight-by-api` (public). PR #1 (dev container) and #2 (Dependabot, Node feature 2.1.2) merged; CI green on `main`. Main ruleset: PR required, check `tests` required, no force push or deletion. CodeQL default setup, Dependabot, secret scanning and private vulnerability reporting are on.
+- Dependabot PRs that touch `.devcontainer/` (features, base image, PyYAML): the CI does not build the image, so the user rebuilds the container from the PR branch before merging. Action updates are covered by the CI.
 - LICENSE: AGPL-3.0-only (user decision, "like Zabbix": Zabbix headers say "version 3", no "or later"). `LICENSE` is the FSF text byte for byte (sha256 0d96a4ff...abcb0, same as gnu.org/licenses/agpl-3.0.txt and Zabbix's COPYING); never edit it.
 - Optional metrics not collected: GPU (`hw.gpu.*`), voltage, current, optical signal power, detailed packet counters.
 
