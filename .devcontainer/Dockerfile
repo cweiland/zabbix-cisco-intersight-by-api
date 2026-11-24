@@ -1,6 +1,6 @@
 # Development sandbox for zabbix-cisco-intersight-by-api.
 # Same tool versions as the GitHub CI (.github/workflows/tests.yml): Node 20 (devcontainer
-# feature), Python 3.12 (Ubuntu 24.04 default) and PyYAML 6.0.3, so that a local run and the CI
+# feature), Python 3.12 (Ubuntu 24.04 default) and PyYAML 6.0.4, so that a local run and the CI
 # generate exactly the same template.
 # Base image pinned by digest (the tag is kept for readability; Docker uses the digest): a
 # re-tagged or substituted image cannot enter the build. Digest of the image the user built and
