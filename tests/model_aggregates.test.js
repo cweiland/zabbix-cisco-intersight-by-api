@@ -1,15 +1,20 @@
-// Per-model aggregates: "devices reporting" must count an item every device has.
-// Power is missing on devices outside the telemetry support lists (seen on some FIs), so
-// counting intersight.power under-counted them. intersight.model is always set by the
-// collector ('unknown' when Intersight has no model).
+// Per-model aggregates: "device count" (formerly "devices reporting") must count an item
+// every device has.
+// Intersight has no power value for some devices (seen on some chassis and servers in the
+// Intersight UI; cause unknown; other device types not checked), so counting
+// intersight.power under-counted them. intersight.model is always set by the collector
+// ('unknown' when Intersight has no model).
 const crypto = require('crypto'), fs = require('fs'), path = require('path');
 const check = (label, condition) => { console.log((condition ? 'PASS ' : 'FAIL ') + label); if (!condition) process.exitCode = 1; };
 
 // 1. Template: the count prototype reads intersight.model, not intersight.power.
 const yaml = fs.readFileSync(path.join(__dirname, '..', 'templates', 'zbx_intersight_templates_7.0.yaml'), 'utf8');
 const countItem = yaml.match(/key: '?intersight\.model\.count\[\{#CLASS\},\{#MODEL\}\]'?\n(?:\s+(?!params:)\w+: .*\n)*\s+params: (.+)/);
-check('devices reporting prototype exists', countItem !== null);
-check('devices reporting counts intersight.model per model group',
+check('device count prototype exists', countItem !== null);
+check('device count prototype named "{#CLASS} {#MODEL}: device count", old name gone',
+      /name: '\{#CLASS\} \{#MODEL\}: device count'\n\s+type: CALCULATED\n\s+key: '?intersight\.model\.count\[/.test(yaml)
+      && !yaml.includes('devices reporting'));
+check('device count counts intersight.model per model group',
       countItem !== null && countItem[1].replace(/'/g, '') === 'count(last_foreach(/*/intersight.model?[group="{#GROUP}"]))');
 
 // 2. Collector: every pushed device has a model, even without Model in the inventory
@@ -23,7 +28,11 @@ HttpRequest.prototype.clearHeader = function () { this.h = []; };
 HttpRequest.prototype.addHeader = function (x) { this.h.push(x); };
 HttpRequest.prototype.getStatus = function () { return 200; };
 HttpRequest.prototype.get = function (u) {
-  if (u.includes('ElementSummaries')) return JSON.stringify({ Results: [{ Moid: 'f1', Name: 'FI-A', Model: 'UCS-FI-6536' }, { Moid: 'f2', Name: 'FI-B' }] });
+  // A server and a chassis with a model, a second server without one; no telemetry at all.
+  if (u.includes('PhysicalSummaries')) return JSON.stringify({ Results: [
+    { Moid: 's1', Name: 'srv-1', Model: 'UCSX-210C-M7', Serial: 'S1' },
+    { Moid: 's2', Name: 'srv-2', Serial: 'S2' }] });
+  if (u.includes('Chasses')) return JSON.stringify({ Results: [{ Moid: 'c1', Name: 'chassis-1', Model: 'UCSX-9508', Serial: 'C1' }] });
   return JSON.stringify({ Results: [] });
 };
 HttpRequest.prototype.post = function (u) {
@@ -32,6 +41,10 @@ HttpRequest.prototype.post = function (u) {
 };
 const parameters = { key_id: 'K', private_key: ecKey.privateKey.export({ type: 'sec1', format: 'pem' }), api_host: 'intersight.com' };
 const out = JSON.parse(new Function('value', code)(JSON.stringify(parameters)));
-check('FIs without telemetry have no power value', out.fis.length === 2 && out.fis.every(fi => fi.power_w === undefined));
-check('every FI has a model (unknown when missing)',
-      out.fis.length === 2 && out.fis[0].model === 'UCS-FI-6536' && out.fis[1].model === 'unknown');
+const byMoid = {};
+out.servers.concat(out.chassis).forEach(device => { byMoid[device.moid] = device; });
+check('server and chassis without telemetry have no power value',
+      ['s1', 's2', 'c1'].every(moid => byMoid[moid] !== undefined && byMoid[moid].power_w === undefined));
+check('server and chassis without power still have their model',
+      byMoid.s1 !== undefined && byMoid.s1.model === 'UCSX-210C-M7' && byMoid.c1 !== undefined && byMoid.c1.model === 'UCSX-9508');
+check('model is "unknown" when Intersight has none', byMoid.s2 !== undefined && byMoid.s2.model === 'unknown');
