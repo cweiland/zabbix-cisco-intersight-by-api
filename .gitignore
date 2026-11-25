@@ -8,6 +8,9 @@
 Supported_Metrices.md
 cisco-docs/
 
+# Zabbix documentation PDF (about 50 MB, reference only): keep it local
+docs/Zabbix_Documentation_*.pdf
+
 # Parameters of local zabbix_js runs: they contain the private key
 params.json
 

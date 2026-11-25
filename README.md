@@ -146,7 +146,8 @@ Non collectés, disponibles dans le catalogue si besoin : GPU (`hw.gpu`), tensio
 | `hw.network.io_receive` / `io_transmit` | `By` (octets) | `bps` | octets ÷ durée (s) × 8, formule des tableaux de bord |
 | `hw.network.bandwidth.limit` | `By/s` | `bps` | × 8 |
 | `hw.network.up` | `1` (0 ou 1) | 0/1 (valeur « Link state ») | aucune |
-| Énergie, coût, CO₂ | — | `!kWh`, `!EUR`, `!kg` | calculés depuis la puissance |
+| Énergie, coût, CO₂ | — | `Wh`, `!EUR`, `g` | calculés depuis la puissance |
+| Durées de l'API (cycle, signature) | — | `s` | mesurées par le collecteur |
 
 **Pourcentages : la doc Cisco indique `%`, mais Intersight stocke des ratios 0–1** (0,1 = 10 %). C'est vérifié dans les données brutes d'une appliance, et cohérent avec les tableaux de bord intersight-grafana, qui multiplient par 100. D'où `{$INTERSIGHT.PERCENT.SCALE}` = 100. Si une version future renvoyait des valeurs 0–100, il suffirait de passer la macro à 1.
 
@@ -154,7 +155,7 @@ Non collectés, disponibles dans le catalogue si besoin : GPU (`hw.gpu`), tensio
 - un pourcentage supérieur à 100 % après mise à l'échelle → valeurs déjà en pourcent, passer l'échelle à 1 ;
 - un idle CPU ≤ 1 sur tous les FI avec l'échelle 1 → valeurs en 0–1, remettre l'échelle à 100.
 
-Affichage Zabbix : le préfixe `!` empêche Zabbix d'ajouter K/M/G aux unités (« 1.5 KkWh » sinon). `%`, `W`, `bps` et `°C` gardent la conversion automatique.
+**Unités de base uniquement** : toutes les valeurs sont stockées en unité de base (W, Wh, g, s, bit/s), jamais en kWh, kg ou ms. L'historique, Grafana et les bases de séries temporelles externes reçoivent donc la valeur brute, sans conversion à refaire. Zabbix n'ajoute les préfixes K/M/G (base 10) qu'à l'affichage, par exemple 1 500 Wh affichés « 1.5 KWh » (doc Zabbix 7.0, « Unit symbols », « Item value suffixes »). Le préfixe `!` empêche cet ajout ; il ne sert que pour `!rpm` et `!EUR`, où un préfixe n'aurait pas de sens.
 
 ## Collecte des métriques
 
@@ -178,7 +179,7 @@ Si un de ces points est faux, l'item « API: last errors » affiche l'appel en c
 
 - **Jointure** : la télémétrie est rattachée à l'inventaire par `host.type` + `host.name`. Un châssis et un serveur de même nom sont donc bien distingués. En revanche, deux serveurs de même nom partagent encore leurs métriques, car Cisco précise que `host.name` n'est pas garanti unique.
 - **Double comptage possible** : si la puissance châssis inclut celle des blades, n'additionne pas les totaux « Chassis » et « Servers ». Les totaux sont volontairement séparés par classe.
-- **Énergie** : `Energy: last 24h` est calculée comme puissance moyenne sur 24 h × 24 / 1000. C'est exact sur une fenêtre glissante, à condition d'avoir 24 h d'historique.
+- **Énergie** : `Energy: last 24h` est calculée comme puissance moyenne sur 24 h × 24, en Wh. C'est exact sur une fenêtre glissante, à condition d'avoir 24 h d'historique. Le coût et le CO₂ divisent ces Wh par 1000, car les macros sont exprimées par kWh.
 - **Historique du script maître** : il est à 0 (le JSON peut être gros). Pour déboguer, utiliser le bouton « Test ».
 - **Température** : les triggers comparent chaque capteur à **ses propres** seuils (`limit_high_critical`, `limit_high_degraded`), sur les équipements qui les remontent. Les températures CPU ne remontent que si l'hôte est allumé.
 - **Puissance châssis IMM** : c'est la somme de la puissance absorbée par les PSU (`hw.power`), Cisco ne remontant pas `hw.host.power` pour ces châssis.

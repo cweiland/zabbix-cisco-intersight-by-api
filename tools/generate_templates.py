@@ -156,8 +156,10 @@ def child(tpl, cls, label, extra_items):
             tags=tag('psu')),
         dep(T, 'intersight.raw', 'Network: errors in window', 'intersight.net.errors', '$.net_errors',
             tags=tag('network')),
-        calc(T, 'Energy: last 24h', 'intersight.energy.kwh.24h',
-             'avg(//intersight.power,24h)*24/1000', '!kWh', '1h', tags=tag('energy')),
+        # Base units only (Wh, not kWh): history and external tools get the raw value;
+        # Zabbix adds K/M/G prefixes on display only (Zabbix 7.0 "Unit symbols").
+        calc(T, 'Energy: last 24h', 'intersight.energy.24h',
+             'avg(//intersight.power,24h)*24', 'Wh', '1h', tags=tag('energy')),
     ]
     items += extra_items(T, tag)
     for it in items:
@@ -407,12 +409,14 @@ def parent(script):
              "var e = JSON.parse(value).api.errors; return e.length ? e.join('\\n') : 'none';"]},
              {'type': 'DISCARD_UNCHANGED_HEARTBEAT', 'parameters': ['1h']}],
          'tags': tag('health')},
-        dep(T, M, 'API: run duration', 'intersight.api.duration', '$.api.duration_ms', units='!ms',
+        # Keys renamed when the unit went from ms to s (was intersight.api.duration / .sign):
+        # a new series, so the old ms history is never read as seconds.
+        dep(T, M, 'API: run duration', 'intersight.api.run.time', '$.api.duration_s', units='s',
             tags=tag('health'),
-            triggers=[trig(T, 'slow', 'min(/$T/intersight.api.duration,#3)>90000',
+            triggers=[trig(T, 'slow', 'min(/$T/intersight.api.run.time,#3)>90',
                            'Intersight: collector close to its 120s timeout', 'WARNING',
                            'Check "API: signing time" (ECDSA in pure JS) and the Intersight API latency.')]),
-        dep(T, M, 'API: signing time (hs2019)', 'intersight.api.sign', '$.api.sign_ms', units='!ms',
+        dep(T, M, 'API: signing time (hs2019)', 'intersight.api.sign.time', '$.api.sign_s', units='s',
             tags=tag('health')),
         dep(T, M, 'Push: values accepted', 'intersight.push.sent', '$.push.sent', 'UNSIGNED', tags=tag('health')),
         dep(T, M, 'Push: values rejected', 'intersight.push.failed', '$.push.failed', 'UNSIGNED',
@@ -439,14 +443,18 @@ def parent(script):
         items += [
             calc(T, cls + ': total power', k % 'power',
                  'sum(last_foreach(/*/intersight.power?[group="%s"]))' % g, 'W', tags=tag('aggregate')),
-            calc(T, cls + ': energy last 24h', k % 'energy',
-                 'sum(last_foreach(/*/intersight.energy.kwh.24h?[group="%s"]))' % g, '!kWh', '1h',
+            # energy.24h / co2.24h: renamed when the unit went from kWh / kg to Wh / g (new
+            # series, no mixed history). Cost keeps its key: still EUR.
+            calc(T, cls + ': energy last 24h', k % 'energy.24h',
+                 'sum(last_foreach(/*/intersight.energy.24h?[group="%s"]))' % g, 'Wh', '1h',
                  tags=tag('aggregate')),
+            # Energy is in Wh and both macros are per kWh, hence the /1000.
             calc(T, cls + ': cost last 24h', k % 'cost',
-                 'last(//%s)*{$INTERSIGHT.ENERGY.PRICE}' % (k % 'energy'), '!EUR', '1h',
+                 'last(//%s)*{$INTERSIGHT.ENERGY.PRICE}/1000' % (k % 'energy.24h'), '!EUR', '1h',
                  tags=tag('aggregate')),
-            calc(T, cls + ': CO2 last 24h', k % 'co2',
-                 'last(//%s)*{$INTERSIGHT.CO2.G.KWH}/1000' % (k % 'energy'), '!kg', '1h', tags=tag('aggregate')),
+            calc(T, cls + ': CO2 last 24h', k % 'co2.24h',
+                 'last(//%s)*{$INTERSIGHT.CO2.G.KWH}/1000' % (k % 'energy.24h'), 'g', '1h',
+                 tags=tag('aggregate')),
         ]
 
     def lldrule(key, name, path, cls_group, tpl, cls):
@@ -482,12 +490,14 @@ def parent(script):
         calc(T, '{#CLASS} {#MODEL}: power min', mk('power.min'), 'min(last_foreach(%s))' % pw, 'W'),
         calc(T, '{#CLASS} {#MODEL}: power max', mk('power.max'), 'max(last_foreach(%s))' % pw, 'W'),
         calc(T, '{#CLASS} {#MODEL}: devices reporting', mk('count'), 'count(last_foreach(%s))' % pw),
-        calc(T, '{#CLASS} {#MODEL}: energy last 24h', mk('energy'),
-             'sum(last_foreach(/*/intersight.energy.kwh.24h?[group="%s"]))' % G, '!kWh', '1h'),
+        # Renamed with the unit change (see the totals above); cost keeps its key.
+        calc(T, '{#CLASS} {#MODEL}: energy last 24h', mk('energy.24h'),
+             'sum(last_foreach(/*/intersight.energy.24h?[group="%s"]))' % G, 'Wh', '1h'),
+        # Energy in Wh, macros per kWh: /1000 (cost in EUR, CO2 in g).
         calc(T, '{#CLASS} {#MODEL}: cost last 24h', mk('cost'),
-             'last(//%s)*{$INTERSIGHT.ENERGY.PRICE}' % mk('energy'), '!EUR', '1h'),
-        calc(T, '{#CLASS} {#MODEL}: CO2 last 24h', mk('co2'),
-             'last(//%s)*{$INTERSIGHT.CO2.G.KWH}/1000' % mk('energy'), '!kg', '1h'),
+             'last(//%s)*{$INTERSIGHT.ENERGY.PRICE}/1000' % mk('energy.24h'), '!EUR', '1h'),
+        calc(T, '{#CLASS} {#MODEL}: CO2 last 24h', mk('co2.24h'),
+             'last(//%s)*{$INTERSIGHT.CO2.G.KWH}/1000' % mk('energy.24h'), 'g', '1h'),
         calc(T, '{#CLASS} {#MODEL}: hottest sensor', mk('temp.max'),
              'max(last_foreach(/*/intersight.temp.max?[group="%s"]))' % G, '°C'),
     ]
