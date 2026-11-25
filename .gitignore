@@ -8,7 +8,8 @@
 Supported_Metrices.md
 cisco-docs/
 
-# Zabbix documentation PDF (about 50 MB, reference only): keep it local
+# Zabbix manual PDF (about 50 MB, reference only): its copyright notice forbids
+# redistributing it, keep it local
 docs/Zabbix_Documentation_*.pdf
 
 # Parameters of local zabbix_js runs: they contain the private key

@@ -36,12 +36,25 @@ request, so the essential rules are repeated here.
 - Run `tools/ci.sh` before proposing a commit; new behaviour gets a PASS/FAIL test.
 - User-facing docs (README, CHANGELOG, docs/) in French; code and comments in English.
 - GitHub Actions: pin every action by full commit SHA, with the release in a comment.
+- Base units only: store W, Wh, g, s, bps, never kWh, kg or ms (Grafana and external TSDBs read
+  the stored value; Zabbix adds K/M/G prefixes on display only). Convert source values to the
+  base unit (ms -> s, bytes -> bits, 0-1 ratios -> %), never a base-unit value to a prefixed
+  unit. See "Units" in `CLAUDE.md`.
+- A unit or scale change requires a new item key (new UUID, new series), with the old and new
+  keys in the CHANGELOG: with the same key, the old history would be read in the new unit.
+- Never commit Cisco pages (`cisco-docs/`, `Supported_Metrices.md`) or the Zabbix manual PDF
+  (`docs/Zabbix_Documentation_*.pdf`): their terms do not allow redistribution.
 
 ## Dev container and security
 
 - Git is read-only in the dev container: do not commit or push; the user does it on the host. Do not
   produce patches or mbox files: edit the files, write the commit message to `.commit-msg.txt`
   (git-ignored) and give the user the branch name ("Change workflow" in `CLAUDE.md`).
+- Before editing, check that the working tree is clean (`git status`); if not, ask the user.
+  One change at a time: wait until the user has committed before starting the next one.
+- Check the commit message for security problems and personal data like any change.
+- Never ask for `.git` to become writable or to commit from the container: a writable `.git`
+  (`commondir`, hooks, config) lets the container run commands through git on the host.
 - If an edit reports an error (for example `ENOENT`), check `git diff` before retrying: on this
   mount the write may have succeeded anyway, and a retry could apply it twice. Run `tools/ci.sh`
   only once all edits are done, never in parallel with them.

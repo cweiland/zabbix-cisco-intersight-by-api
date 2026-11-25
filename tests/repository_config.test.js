@@ -71,6 +71,23 @@ check('change workflow: CLAUDE.md says to check `git diff` before retrying a fai
 check('change workflow: copilot-instructions.md says to check `git diff` before retrying a failed edit',
   collapseWhitespace(copilotInstructions).indexOf('`git diff` before retrying') !== -1);
 
+// Change workflow rules that were only in CLAUDE.md (review of PR #14): both files state them.
+['check that the working tree is clean', 'One change at a time',
+ 'for security problems and personal data like any change', 'a writable `.git`'].forEach(function (rule) {
+  Object.keys(instructionFiles).forEach(function (file) {
+    var text = collapseWhitespace(instructionFiles[file]);
+    check('change workflow: ' + file + ' states: ' + rule,
+      text.toLowerCase().indexOf(rule.toLowerCase()) !== -1);
+  });
+});
+// Unit rules (PR #13 and #14), so that Copilot reviews apply them too.
+['Base units only', 'requires a new item key', 'Zabbix_Documentation'].forEach(function (rule) {
+  Object.keys(instructionFiles).forEach(function (file) {
+    check('units and docs: ' + file + ' states: ' + rule,
+      collapseWhitespace(instructionFiles[file]).indexOf(rule) !== -1);
+  });
+});
+
 // The sync rule is the "Working rules" bullet that contains "in the same change"; each file's
 // rule must name the other file, otherwise a change in one would not lead to the other.
 function syncRule(text) {
