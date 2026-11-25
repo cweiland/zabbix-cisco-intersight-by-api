@@ -3898,7 +3898,7 @@ zabbix_export:
         key: intersight.model.count[{#CLASS},{#MODEL}]
         delay: 5m
         value_type: FLOAT
-        params: count(last_foreach(/*/intersight.power?[group="{#GROUP}"]))
+        params: count(last_foreach(/*/intersight.model?[group="{#GROUP}"]))
         tags:
         - tag: component
           value: aggregate
