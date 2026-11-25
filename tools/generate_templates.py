@@ -489,7 +489,13 @@ def parent(script):
         calc(T, '{#CLASS} {#MODEL}: power average', mk('power.avg'), 'avg(last_foreach(%s))' % pw, 'W'),
         calc(T, '{#CLASS} {#MODEL}: power min', mk('power.min'), 'min(last_foreach(%s))' % pw, 'W'),
         calc(T, '{#CLASS} {#MODEL}: power max', mk('power.max'), 'max(last_foreach(%s))' % pw, 'W'),
-        calc(T, '{#CLASS} {#MODEL}: devices reporting', mk('count'), 'count(last_foreach(%s))' % pw),
+        # Counted on intersight.model, not on power: Intersight has no power value for some
+        # devices (seen on some chassis and servers in the Intersight UI; cause unknown; other
+        # device types not checked), while the collector always sets model ('unknown' when
+        # Intersight has none). count() without operator counts the values whatever their
+        # type, so a CHAR item works (Zabbix 7.0 source, eval_execute_function_count).
+        calc(T, '{#CLASS} {#MODEL}: device count', mk('count'),
+             'count(last_foreach(/*/intersight.model?[group="%s"]))' % G),
         # Renamed with the unit change (see the totals above); cost keeps its key.
         calc(T, '{#CLASS} {#MODEL}: energy last 24h', mk('energy.24h'),
              'sum(last_foreach(/*/intersight.energy.24h?[group="%s"]))' % G, 'Wh', '1h'),

@@ -3893,12 +3893,12 @@ zabbix_export:
         - tag: model
           value: '{#MODEL}'
       - uuid: 9190018d66074570afd42e0137ed4915
-        name: '{#CLASS} {#MODEL}: devices reporting'
+        name: '{#CLASS} {#MODEL}: device count'
         type: CALCULATED
         key: intersight.model.count[{#CLASS},{#MODEL}]
         delay: 5m
         value_type: FLOAT
-        params: count(last_foreach(/*/intersight.power?[group="{#GROUP}"]))
+        params: count(last_foreach(/*/intersight.model?[group="{#GROUP}"]))
         tags:
         - tag: component
           value: aggregate
