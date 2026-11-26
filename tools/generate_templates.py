@@ -70,12 +70,16 @@ def jp(path, handler='DISCARD_VALUE', hb=None):
     return steps
 
 
-def trig(tpl, key, expr, name, prio, desc=None, manual=False, ctx=''):
+def trig(tpl, key, expr, name, prio, desc=None, manual=False, ctx='', opdata=None, tags=None):
     t = {'uuid': uid(tpl, key, name, ctx), 'expression': expr.replace('$T', tpl), 'name': name, 'priority': prio}
+    if opdata:
+        t['opdata'] = opdata
     if desc:
         t['description'] = desc
     if manual:
         t['manual_close'] = 'YES'
+    if tags:
+        t['tags'] = tags
     return t
 
 
@@ -117,6 +121,88 @@ def macro(m, v, d, secret=False):
         x['type'] = 'SECRET_TEXT'
         del x['value']
     return x
+
+
+# ------------------------------------------------------------------ Intersight alarms
+# Each Intersight alarm (cond.Alarm) becomes a Zabbix problem on the host of its device.
+# One-way mirror: nothing is written to Intersight, actions on Zabbix problems have no effect there.
+# Lifecycle (Cisco "Intersight Alarms Reference Guide", "Intersight Alarms Overview"): Active,
+# Acknowledged, Suppressed, Cleared; acknowledging does not change the severity, so an
+# acknowledged or suppressed alarm keeps its problem open: only Cleared (severity 0) closes it.
+# User choices: Critical -> High (not Disaster); Info alarms raise problems too (the Info
+# prototype can be disabled).
+ALARM_TRIGGER_PRIORITY = [(3, 'HIGH'), (2, 'WARNING'), (1, 'INFO')]
+ALARM_VALUE_HEARTBEAT = '1h'   # {$INTERSIGHT.ALARM.NODATA} must stay above this heartbeat
+ALARM_VALUEMAPS = [
+    ('Intersight alarm severity', [('0', 'Cleared'), ('1', 'Info'), ('2', 'Warning'), ('3', 'Critical')]),
+    ('Intersight alarm acknowledged', [('0', 'No'), ('1', 'Yes')]),
+    ('Intersight alarm suppressed', [('0', 'No'), ('1', 'Yes')]),
+]
+
+
+def alarm_valuemaps(T):
+    return [{'uuid': uid(T, 'vm', name), 'name': name,
+             'mappings': [{'value': v, 'newvalue': n} for v, n in mappings]} for name, mappings in ALARM_VALUEMAPS]
+
+
+def alarm_macros():
+    return [
+        macro('{$INTERSIGHT.ALARM.NODATA}', '2h',
+              'An alarm item without value for this long closes its problem (alarm gone from Intersight '
+              'without Cleared, or collector down). Must stay above the 1h heartbeat of the alarm items.'),
+        macro('{$INTERSIGHT.ALARM.LOST.DISABLE}', '1d',
+              'Alarms no longer reported by Intersight: items disabled after this long. Must be shorter '
+              'than {$INTERSIGHT.ALARM.LOST.DELETE} (Zabbix 7.0 "Low-level discovery").'),
+        macro('{$INTERSIGHT.ALARM.LOST.DELETE}', '7d',
+              'Alarms no longer reported by Intersight: items deleted after this long. Must be longer '
+              'than {$INTERSIGHT.ALARM.LOST.DISABLE}.'),
+    ]
+
+
+def alarm_discovery(T, master, path):
+    """LLD rule "Intersight alarms" on the list `path` of the master item (one entry per alarm)."""
+    item = lambda field: 'intersight.alarm.%s[{#ALARM.ID}]' % field
+    select = lambda field: "%s[?(@.id=='{#ALARM.ID}')].%s.first()" % (path, field)
+    # A new list per object: a shared one would be written as a YAML anchor / alias.
+    tags = lambda: [{'tag': 'component', 'value': 'alarm'}, {'tag': 'alarm-code', 'value': '{#ALARM.CODE}'}]
+    prototypes = [
+        dep(T, master, 'Alarm {#ALARM.NAME} on {#ALARM.TARGET}: ' + label, item(field), select(field), 'UNSIGNED',
+            tags=tags(), vmap=vmap, hb=ALARM_VALUE_HEARTBEAT)
+        for field, label, vmap in (('severity', 'severity', 'Intersight alarm severity'),
+                                   ('ack', 'acknowledged', 'Intersight alarm acknowledged'),
+                                   ('suppressed', 'suppressed', 'Intersight alarm suppressed'))]
+    # {ITEM.LASTVALUE<N>} is the item of the Nth FUNCTION of the expression (Zabbix 7.0 source:
+    # zbxeval/parse.c numbers each function, zbxdbwrap/trigger.c zbx_db_trigger_get_itemid reads
+    # that number). Expression macros {?...} are not supported in operational data. Hence the
+    # always-true "last(ack)>=0" (function 2) and "last(suppressed)>=0" (function 3): they only
+    # make these items available as {ITEM.LASTVALUE2} and {ITEM.LASTVALUE3}; keep this order.
+    # Limit: if the ack or suppressed item becomes unsupported, the trigger can become unknown.
+    # nodata() (any value type, period >= 30s) closes the problem when the alarm leaves the data.
+    expression = ('last(/$T/%s)=%%d and last(/$T/%s)>=0 and last(/$T/%s)>=0 '
+                  'and nodata(/$T/%s,{$INTERSIGHT.ALARM.NODATA})=0'
+                  % (item('severity'), item('ack'), item('suppressed'), item('severity')))
+    triggers = [trig(T, 'alarm', expression % level, 'Intersight alarm: {#ALARM.NAME} on {#ALARM.TARGET}',
+                     priority, ctx=str(level), tags=tags(),
+                     opdata='Acknowledged in Intersight: {ITEM.LASTVALUE2}, suppressed: {ITEM.LASTVALUE3}',
+                     desc='Mirror of Intersight alarm {#ALARM.ID} (code {#ALARM.CODE}). Acknowledging or '
+                          'suppressing it in Intersight keeps the problem open; only Cleared closes it. '
+                          'Nothing done here is sent to Intersight.')
+                for level, priority in ALARM_TRIGGER_PRIORITY]
+    return {
+        'uuid': uid(T, 'alarm.discovery'), 'name': 'Intersight alarms', 'type': 'DEPENDENT',
+        'key': 'intersight.alarm.discovery', 'master_item': {'key': master},
+        # One macro per field, nothing else ("User macros supported by location", note 1).
+        'lifetime_type': 'DELETE_AFTER', 'lifetime': '{$INTERSIGHT.ALARM.LOST.DELETE}',
+        'enabled_lifetime_type': 'DISABLE_AFTER', 'enabled_lifetime': '{$INTERSIGHT.ALARM.LOST.DISABLE}',
+        'lld_macro_paths': [{'lld_macro': '{#ALARM.ID}', 'path': '$.id'},
+                            {'lld_macro': '{#ALARM.NAME}', 'path': '$.name'},
+                            {'lld_macro': '{#ALARM.CODE}', 'path': '$.code'},
+                            {'lld_macro': '{#ALARM.TARGET}', 'path': '$.target'}],
+        # No list (alarm request failed): discard, so that no alarm is marked as lost.
+        'preprocessing': [{'type': 'JSONPATH', 'parameters': [path], 'error_handler': 'DISCARD_VALUE'}],
+        'item_prototypes': prototypes,
+        'trigger_prototypes': triggers,
+    }
 
 
 # ------------------------------------------------------------------ child templates
@@ -252,7 +338,7 @@ def child(tpl, cls, label, extra_items):
         'vendor': {'name': 'Custom', 'version': '7.0-6'},
         'groups': [{'name': TGROUP}],
         'items': items,
-        'discovery_rules': [lld_psu, lld_port],
+        'discovery_rules': [lld_psu, lld_port, alarm_discovery(T, 'intersight.raw', '$.alarms')],
         'tags': [{'tag': 'class', 'value': 'hardware'}, {'tag': 'target', 'value': 'cisco-intersight'}],
         'macros': [
             macro('{$INTERSIGHT.NODATA}', '20m', 'No pushed data for this long raises a warning.'),
@@ -268,11 +354,12 @@ def child(tpl, cls, label, extra_items):
             macro('{$INTERSIGHT.PORT.ROLE.NOT_MATCHES}', '^(unconfigured|vethernet|vfc|vnic|vhba)$',
                   'Regex of port roles (hw.network.port.role) to ignore. Default: unconfigured and virtual '
                   'interfaces, as excluded by the intersight-grafana dashboards.'),
-        ],
+        ] + alarm_macros(),
         'valuemaps': [{'uuid': uid(T, 'vm'), 'name': 'Power state',
                        'mappings': [{'value': '0', 'newvalue': 'Off'}, {'value': '1', 'newvalue': 'On'}]},
                       {'uuid': uid(T, 'vm-link'), 'name': 'Link state',
-                       'mappings': [{'value': '0', 'newvalue': 'Down'}, {'value': '1', 'newvalue': 'Up'}]}],
+                       'mappings': [{'value': '0', 'newvalue': 'Down'}, {'value': '1', 'newvalue': 'Up'}]}]
+                     + alarm_valuemaps(T),
     }
 
 
@@ -382,7 +469,8 @@ def parent(script):
               ('datasource', '{$INTERSIGHT.DATASOURCE}'),
               ('network_datasource', '{$INTERSIGHT.DATASOURCE.NETWORK}'), ('component_dim', '{$INTERSIGHT.COMPONENT.DIM}'),
               ('flat_servers', '{$INTERSIGHT.FLAT.SERVERS}'),
-              ('percent_scale', '{$INTERSIGHT.PERCENT.SCALE}'), ('zbx_url', '{$ZABBIX.API.URL}'),
+              ('percent_scale', '{$INTERSIGHT.PERCENT.SCALE}'),
+              ('alarm_cleared_window', '{$INTERSIGHT.ALARM.CLEARED.WINDOW}'), ('zbx_url', '{$ZABBIX.API.URL}'),
               ('zbx_token', '{$ZABBIX.API.TOKEN}')]
     items = [{
         'uuid': uid(T, M), 'name': 'Intersight collector', 'type': 'SCRIPT', 'key': M, 'delay': '5m',
@@ -521,6 +609,7 @@ def parent(script):
                            'error_handler': 'CUSTOM_VALUE', 'error_handler_params': '[]'}],
         'item_prototypes': model_items,
     })
+    disc.append(alarm_discovery(T, M, '$.platform_alarms'))
     return {
         'uuid': uid(T), 'template': T, 'name': T,
         'description': 'Cisco Intersight (SaaS or appliance). Auth: API key v3 hs2019 (default), API key v2 rsa, or OAuth2. '
@@ -558,7 +647,10 @@ def parent(script):
                   True),
             macro('{$INTERSIGHT.ENERGY.PRICE}', '0', 'Electricity price per kWh. To fill in.'),
             macro('{$INTERSIGHT.CO2.G.KWH}', '0', 'Grid carbon intensity in gCO2/kWh. To fill in.'),
-        ],
+            macro('{$INTERSIGHT.ALARM.CLEARED.WINDOW}', '1d',
+                  'Cleared alarms younger than this are still read, so that their problem closes.'),
+        ] + alarm_macros(),
+        'valuemaps': alarm_valuemaps(T),
     }
 
 

@@ -105,6 +105,8 @@ python3 tools/check_metrics_against_doc.py <Supported_Metrices.md>
 - Zabbix limits **HttpRequest objects** to 10 per script, so one object is reused for all Intersight calls.
 - `history.push` exists since Zabbix 7.0. It accepts host + key. If "Allowed hosts" is set on a trapper item, it must include the frontend IP.
 - **Nested LLD (discovery prototypes) only exists since Zabbix 7.4.**
+- `{ITEM.LASTVALUE<N>}` is the item of the Nth **function** of the trigger expression, not the Nth distinct item (Zabbix 7.0 source: `src/libs/zbxeval/parse.c` numbers each function token, `src/libs/zbxdbwrap/trigger.c` `zbx_db_trigger_get_itemid` reads that number). So `last(a)=1 and nodata(a,…)=0 and last(b)>=0` makes `b` `{ITEM.LASTVALUE3}`. The alarm triggers put `nodata()` last for this reason.
+- LLD lost resources in the 7.0 YAML: `lifetime_type` (`DELETE_AFTER`), `lifetime`, `enabled_lifetime_type` (`DISABLE_AFTER`), `enabled_lifetime` (Zabbix 7.0 source, `ui/include/classes/import/validators/C70XmlValidator.php`; default `enabled_lifetime_type` is `DISABLE_IMMEDIATELY`).
 - Telemetry dataSources (catalog): `hw.network` is in **NetworkInterfaces**; everything else is in **PhysicalEntities**. Queries go to `/api/v1/telemetry/TimeSeries` (DevNet "Telemetry APIs - Query Syntax").
 - `host.name` is not unique (Cisco), so telemetry is matched on `host.type` + `host.name`.
 - Support lists (catalog): `hw.host.power` is NOT reported for IMM chassis (their power = sum of PSU `hw.power`); ECC errors by blades and racks; `system.cpu` / `system.memory` by FIs; `hw.network.bandwidth.utilization_all` by blades, racks and FIs.
@@ -120,8 +122,20 @@ python3 tools/check_metrics_against_doc.py <Supported_Metrices.md>
 - **hs2019 signing (EC P-256 mode) accepted by the appliance:** inventory is collected and "API: last errors" is empty. The signing string order is therefore right for this appliance (RSA and OAuth modes still untested).
 - **Blade↔chassis matching by `RegisteredDevice.Moid:ChassisId` FAILS:** `blades` was empty in every chassis; the user compared `chassis_key` values: the `RegisteredDevice.Moid` part differs between a blade and its chassis. Fix (not yet checked on the appliance): match on `compute.PhysicalSummary.EquipmentChassis.Moid` == chassis `Moid` (field from the Intersight API schema, CiscoDevNet/intersight-python 1.0.11.x `compute_physical_summary_all_of.py`), old key only as fallback; `servers[].chassis_moid` shows the value read. Only affects the 7.4 nested mode (`flat_servers=0`); in 7.0 all servers are discovered anyway.
 
+### Alarms (reported by the user, 2026-11-26)
+
+- `AncestorMoId` of an alarm equals the `Moid` of the device in `compute/PhysicalSummaries` (servers), `equipment/Chasses` (chassis) and `network/ElementSummaries` (FI, `AncestorMoType` = `network.Element`).
+- `AffectedMoId` is empty on open alarms: never use it to attach an alarm.
+- An alarm keeps its `Moid` until Cleared; a Cleared alarm keeps its `OrigSeverity` (Critical or Warning), with a `LastTransitionTime` later than its `CreationTime`.
+- Alarms without ancestor have `AncestorMoId = ''`: the filter `eq ''` finds 14, `eq null` none. Their `AffectedMoType` and `AncestorMoType` are empty too. Their affected object (`AffectedMo.ObjectType`) is a platform object: `iam.ApiKey` or `softwarerepository.Authorization`, the only types seen (list not exhaustive).
+- The combined filter `Severity ne 'Cleared' or (Severity eq 'Cleared' and LastTransitionTime gt <date>)` is accepted and returns exactly the union: 222 not Cleared + 171 Cleared since 2026-11-25 = 393.
+- Fields `AncestorMoId`, `AncestorMoType`, `Acknowledge`, `Suppressed`, `LastTransitionTime` and `OrigSeverity` exist on the appliance.
+- Volume: about 220 open alarms and about 170 Cleared per day; everything fits in one page of 1,000 (`PAGE_SIZE`).
+- Design decisions (user, 2026-11-26): Critical -> High (not Disaster); Info alarms raise problems (prototype can be disabled); Cleared window 1d; lost resources disabled after 1d, deleted after 7d; Severity `None` (SDK enum) not pushed; alarm items use a 1h heartbeat with `{$INTERSIGHT.ALARM.NODATA}` = 2h; `AcknowledgeBy` (a person's name) is never selected nor pushed.
+
 ## NOT verified yet (first things to check on the real system)
 
+- Whether `{ITEM.LASTVALUE2}` / `{ITEM.LASTVALUE3}` in the alarm triggers' operational data show the raw 0/1 or the value map label: check after import.
 - **Inventory fields** not confirmed on the appliance: FI `Version` and `OutOfBandIpAddress`, chassis `OperState`.
 - **Response shapes**: list endpoints are assumed to return `{Results: [...]}` (the groupBy `[{event: {...}}]` shape is documented by the Metrics Explorer example).
 - `hw.status` is deliberately not used: its "one series per state" semantics were unclear. Left pending (user decision, 2026-11-24).

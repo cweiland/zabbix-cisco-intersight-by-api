@@ -27,7 +27,7 @@ HttpRequest.prototype.get=function(url){this._verify('get',url,'');
    {Moid:'s3',Name:'srv-a',Model:'UCSC-C220-M6S',Serial:'WZP3',OperPowerState:'on'}]});
   if(url.includes('Chasses'))return R({Results:[{Moid:'c1',Name:'chassis-1',Model:'UCSX-9508',Serial:'FOX1',ChassisId:1,RegisteredDevice:{Moid:'dom1'},OperState:'operable'}]});
   if(url.includes('ElementSummaries'))return R({Results:[{Moid:'f1',Name:'FI-A',Model:'UCS-FI-6454',Version:'4.3(2)'}]});
-  if(url.includes('Alarms')){ if(!url.includes("%20eq%20'None'"))throw 'enc';return R({Results:[{Severity:'Critical'},{Severity:'Warning'},{Severity:'Info'}]});}
+  if(url.includes('Alarms')){ if(!url.includes("%20eq%20'Cleared'"))throw 'enc';return R({Results:[{Severity:'Critical'},{Severity:'Warning'},{Severity:'Info'}]});}
   throw 'unexpected '+url;};
 HttpRequest.prototype.post=function(url,body){
   if(url.includes('api_jsonrpc')){pushed=JSON.parse(body);return R({jsonrpc:'2.0',result:{response:'success',data:pushed.params.map((x,i)=>i==0?{error:'no item'}:{itemid:String(i)})},id:1});}

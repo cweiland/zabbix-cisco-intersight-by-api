@@ -1,6 +1,13 @@
 # Changelog
 
 ## Non publié
+- **Alarmes Intersight → problèmes Zabbix** : chaque alarme Intersight devient un problème sur l'hôte de son équipement (serveur, châssis ou FI dont le `Moid` est égal à l'`AncestorMoId` de l'alarme). Les alarmes sans équipement connu (objets de la plateforme, ancêtre inconnu) vont sur l'hôte parent. Miroir à sens unique : rien n'est écrit vers Intersight. Détails dans le README, section « Alarmes Intersight ».
+  - Une seule requête `cond/Alarms` par cycle (alarmes non Cleared + alarmes Cleared récentes) remplace l'ancienne requête des alarmes non acquittées. Les compteurs d'alarmes existants ne changent pas. `AcknowledgeBy` (nom d'une personne) n'est jamais lu.
+  - Nouvelle règle de découverte « Intersight alarms » sur les quatre templates : items `intersight.alarm.severity[…]`, `.ack[…]`, `.suppressed[…]` (heartbeat 1 h), trois triggers exclusifs, tags `component: alarm` et `alarm-code`.
+  - Sévérités : Critical → High (pas Disaster), Warning → Warning, Info → Information (prototype désactivable), Cleared → problème fermé. Les alarmes de sévérité `None` ne sont pas poussées.
+  - Acquitter ou supprimer une alarme dans Intersight **ne ferme pas** le problème : il reste ouvert et l'état Intersight est affiché dans ses données opérationnelles. Seul Cleared le ferme.
+  - Nouvelles macros : `{$INTERSIGHT.ALARM.CLEARED.WINDOW}` = `1d`, `{$INTERSIGHT.ALARM.NODATA}` = `2h` (doit rester supérieure au heartbeat de 1 h), `{$INTERSIGHT.ALARM.LOST.DISABLE}` = `1d`, `{$INTERSIGHT.ALARM.LOST.DELETE}` = `7d`. **La suppression doit rester plus longue que la désactivation** (doc Zabbix 7.0, « Low-level discovery »).
+  - À vérifier après import : si `{ITEM.LASTVALUE2}` et `{ITEM.LASTVALUE3}` affichent la valeur brute ou le libellé de la table de valeurs.
 - **Unités de base uniquement** : les valeurs sont stockées en W, Wh, g et s au lieu de kWh, kg et ms, pour que Grafana et les bases de séries temporelles externes reçoivent la valeur brute. Zabbix n'ajoute les préfixes K/M/G qu'à l'affichage (« 1.5 KWh »).
   - Énergie 24 h en `Wh` (plus de `/1000`). **Clé renommée** `intersight.energy.kwh.24h` → `intersight.energy.24h` : nouvel UUID, l'historique de l'ancien item est perdu à la réimportation.
   - Coût : `énergie × {$INTERSIGHT.ENERGY.PRICE} / 1000` (le prix reste par kWh). CO₂ en `g` (l'intensité reste en gCO₂/kWh).
