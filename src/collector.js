@@ -59,7 +59,12 @@
  *      ancestor_type (AncestorMoType) in platform_alarms only.
  *      AcknowledgeBy (a person's name) is never read nor pushed.
  *    Returned document:
- *      ts, api {calls, errors[], duration_s, sign_s},
+ *      ts, api {calls, errors[], duration_s, sign_s, max_push_bytes, max_push_moid},
+ *        max_push_bytes  UTF-8 size in bytes of the largest value sent to intersight.raw
+ *                        (Zabbix truncates a stored Text value: 65536 bytes on MySQL,
+ *                        65536 characters on PostgreSQL, Zabbix 7.0 "Creating an item");
+ *        max_push_moid   Moid of the device of that value;
+ *        both absent when the push is disabled or there is no device,
  *      counts {servers, chassis, fi}   each absent if its inventory request failed,
  *      alarms {critical, warning, info}, push {enabled, sent, failed},
  *      servers[], chassis[], fis[]   each absent if its inventory request failed ([] if
@@ -1477,18 +1482,51 @@ function attachAlarmsToDevices(alarmObjects, devices) {
 //  "intersight-<Moid>". Values for hosts not yet discovered are rejected: this is
 //  expected during the first run after a new device appears.
 
+// Size in bytes of a string once encoded in UTF-8: Zabbix stores item values in UTF-8, and
+// MySQL limits TEXT columns in bytes. Two forms of a character above U+FFFF are counted as
+// 4 bytes: a UTF-16 surrogate pair (standard ECMAScript, e.g. a pair of JSON \u escapes)
+// and a single code point above 0xFFFF (Duktape 2.7.0, bundled with Zabbix 7.0, keeps a 4-byte
+// UTF-8 sequence read from an HTTP body as one character, and charCodeAt() returns its full
+// code point: duk_bi_string.c, duk_hstring_misc.c). A lone surrogate is counted as 3 bytes.
+function utf8ByteLength(text) {
+    var byteCount = 0, index, codeUnit, nextCodeUnit;
+    for (index = 0; index < text.length; index++) {
+        codeUnit = text.charCodeAt(index);
+        if (codeUnit < 0x80) { byteCount += 1; }
+        else if (codeUnit < 0x800) { byteCount += 2; }
+        else if (codeUnit > 0xFFFF) { byteCount += 4; }
+        else if (codeUnit >= 0xD800 && codeUnit <= 0xDBFF && index + 1 < text.length) {
+            nextCodeUnit = text.charCodeAt(index + 1);
+            if (nextCodeUnit >= 0xDC00 && nextCodeUnit <= 0xDFFF) { byteCount += 4; index++; }
+            else { byteCount += 3; }
+        }
+        else { byteCount += 3; }
+    }
+    return byteCount;
+}
+
+// Returns {counts: {enabled, sent, failed}, maxBytes, maxMoid}: maxBytes / maxMoid describe the
+// largest value built for intersight.raw (undefined when nothing is pushed), measured whether
+// or not the history.push request then succeeds.
 function pushDevicesToZabbix(allDevices, collectionTime) {
     var pushResult = { enabled: CONFIG.pushEnabled ? 1 : 0, sent: 0, failed: 0 };
-    var historyValues = [], index, zabbixHttp, response, perValueResults;
+    var pushOutcome = { counts: pushResult, maxBytes: undefined, maxMoid: undefined };
+    var historyValues = [], index, zabbixHttp, response, perValueResults, rawValue, rawValueBytes;
     var clockSeconds = Math.floor(collectionTime.getTime() / 1000);
 
-    if (!CONFIG.pushEnabled || allDevices.length === 0) { return pushResult; }
+    if (!CONFIG.pushEnabled || allDevices.length === 0) { return pushOutcome; }
 
     for (index = 0; index < allDevices.length; index++) {
+        rawValue = JSON.stringify(allDevices[index]);
+        rawValueBytes = utf8ByteLength(rawValue);
+        if (pushOutcome.maxBytes === undefined || rawValueBytes > pushOutcome.maxBytes) {
+            pushOutcome.maxBytes = rawValueBytes;
+            pushOutcome.maxMoid = allDevices[index].moid;
+        }
         historyValues.push({
             host: ZABBIX_HOST_PREFIX + allDevices[index].moid,
             key: ZABBIX_RAW_ITEM_KEY,
-            value: JSON.stringify(allDevices[index]),
+            value: rawValue,
             clock: clockSeconds
         });
     }
@@ -1512,7 +1550,7 @@ function pushDevicesToZabbix(allDevices, collectionTime) {
         collectedErrors.push('history.push: ' + error);
         pushResult.failed = historyValues.length;
     }
-    return pushResult;
+    return pushOutcome;
 }
 
 // =====================================================================================
@@ -1569,7 +1607,7 @@ var platformAlarms = attachAlarmsToDevices(alarmObjects, allDevices);
 var inventoryComplete = serverInventory !== null && chassisInventory !== null && fabricInterconnectInventory !== null;
 
 // --- Push to the discovered hosts
-var pushResult = pushDevicesToZabbix(allDevices, collectionTime);
+var pushOutcome = pushDevicesToZabbix(allDevices, collectionTime);
 // servers / chassis / fis below share these objects: the attached alarms belong to the device
 // hosts only, the parent result keeps platform_alarms alone.
 var deviceIndex;
@@ -1591,7 +1629,11 @@ return JSON.stringify({
         errors: collectedErrors,
         // Seconds (base unit), not ms: the history and external tools get base units.
         duration_s: (new Date().getTime() - runStartTime) / 1000,
-        sign_s: signingTimeMs / 1000
+        sign_s: signingTimeMs / 1000,
+        // Largest value pushed to intersight.raw, in UTF-8 bytes, and its device; left out
+        // (undefined) when nothing is pushed, so that the parent items discard the value.
+        max_push_bytes: pushOutcome.maxBytes,
+        max_push_moid: pushOutcome.maxMoid
     },
     // No count for a list that failed (the count items discard a missing value), not a false 0.
     counts: {
@@ -1601,7 +1643,7 @@ return JSON.stringify({
     },
     // Alarm request failed: no totals (the total items discard a missing value), not false zeros.
     alarms: alarmObjects === null ? undefined : countAlarmsBySeverity(alarmObjects),
-    push: pushResult,
+    push: pushOutcome.counts,
     // A list whose request failed is left out (JSON.stringify drops undefined): its discovery
     // rule then discards the value instead of treating every host of that class as lost.
     // A list that Intersight returned empty is still sent as [] (listAllObjects gives []).

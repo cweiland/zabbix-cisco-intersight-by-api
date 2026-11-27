@@ -55,12 +55,13 @@ check('percent_scale 1 on 0-1 ratios -> idle <= 1 on every FI reported as a prob
 // Base units only (user requirement): stored values must be in W, Wh, g, s, bps..., never
 // kWh, kg or ms, so that Grafana and external TSDBs get the raw value. Zabbix adds K/M/G
 // prefixes on display only (Zabbix 7.0 "Unit symbols", "Item value suffixes"). "!" stops those prefixes (Zabbix 7.0 "Unit symbols"): kept
-// for units where a prefix makes no sense (rpm, EUR).
+// for units where a prefix makes no sense (rpm, EUR). B (bytes, size of the pushed JSON) is
+// shown with base-2 prefixes, 1536 B -> "1.5 KB" (Zabbix 7.0 "Unit symbols", "Item value suffixes").
 const yaml = fs.readFileSync(path.join(__dirname, '..', 'templates', 'zbx_intersight_templates_7.0.yaml'), 'utf8');
 const units = [...yaml.matchAll(/^\s+units: (.+)$/gm)].map(m => m[1].replace(/'/g, ''));
-const allowed = ['%', 'W', 'Wh', 'g', 's', 'bps', '°C', '!rpm', '!EUR'];
+const allowed = ['%', 'W', 'Wh', 'g', 's', 'bps', 'B', '°C', '!rpm', '!EUR'];
 check(`template units are all from the reviewed list (${[...new Set(units)].sort().join(' ')})`, units.length > 0 && units.every(u => allowed.includes(u)));
-check('no prefixed unit (kWh, kg, ms, with or without "!")', !units.some(u => /^!?(k|M|G|m)(W|Wh|g|s|bps)$/.test(u)));
+check('no prefixed unit (kWh, kg, ms, KB, with or without "!")', !units.some(u => /^!?(k|K|M|G|m)(W|Wh|g|s|bps|B)$/.test(u)));
 check('no bare rpm / EUR (would display e.g. "1.5 Krpm")', !units.some(u => ['rpm', 'EUR'].includes(u)));
 check('energy in Wh: power average * 24, no /1000', /^\s+params: avg\(\/\/intersight\.power,24h\)\*24$/m.test(yaml) && !yaml.includes('intersight.energy.kwh'));
 const costFormulas = [...yaml.matchAll(/^\s+params: (last\(\/\/.*\{\$INTERSIGHT\.(?:ENERGY\.PRICE|CO2\.G\.KWH)\}.*)$/gm)].map(m => m[1]);
