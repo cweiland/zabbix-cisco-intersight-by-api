@@ -535,7 +535,10 @@ zabbix_export:
       key: intersight.psu.discovery
       master_item:
         key: intersight.raw
-      lifetime: 7d
+      lifetime_type: DELETE_AFTER
+      lifetime: '{$INTERSIGHT.LLD.LOST.DELETE}'
+      enabled_lifetime_type: DISABLE_AFTER
+      enabled_lifetime: '{$INTERSIGHT.LLD.LOST.DISABLE}'
       lld_macro_paths:
       - lld_macro: '{#PSU}'
         path: $.name
@@ -612,7 +615,10 @@ zabbix_export:
       key: intersight.port.discovery
       master_item:
         key: intersight.raw
-      lifetime: 7d
+      lifetime_type: DELETE_AFTER
+      lifetime: '{$INTERSIGHT.LLD.LOST.DELETE}'
+      enabled_lifetime_type: DISABLE_AFTER
+      enabled_lifetime: '{$INTERSIGHT.LLD.LOST.DISABLE}'
       filter:
         evaltype: AND
         conditions:
@@ -933,6 +939,12 @@ zabbix_export:
     - macro: '{$INTERSIGHT.PORT.ROLE.NOT_MATCHES}'
       value: ^(unconfigured|vethernet|vfc|vnic|vhba)$
       description: 'Regex of port roles (hw.network.port.role) to ignore. Default: unconfigured and virtual interfaces, as excluded by the intersight-grafana dashboards.'
+    - macro: '{$INTERSIGHT.LLD.LOST.DISABLE}'
+      value: 1h
+      description: 'PSUs and ports no longer reported: items disabled after this long. Must be shorter than {$INTERSIGHT.LLD.LOST.DELETE} (Zabbix 7.0 "Low-level discovery").'
+    - macro: '{$INTERSIGHT.LLD.LOST.DELETE}'
+      value: 7d
+      description: 'PSUs and ports no longer reported: items deleted after this long. Must be longer than {$INTERSIGHT.LLD.LOST.DISABLE}.'
     - macro: '{$INTERSIGHT.ALARM.NODATA}'
       value: 2h
       description: An alarm item without value for this long closes its problem (alarm gone from Intersight without Cleared, or collector down). Must stay above the 1h heartbeat of the alarm items.
@@ -1292,7 +1304,10 @@ zabbix_export:
       key: intersight.psu.discovery
       master_item:
         key: intersight.raw
-      lifetime: 7d
+      lifetime_type: DELETE_AFTER
+      lifetime: '{$INTERSIGHT.LLD.LOST.DELETE}'
+      enabled_lifetime_type: DISABLE_AFTER
+      enabled_lifetime: '{$INTERSIGHT.LLD.LOST.DISABLE}'
       lld_macro_paths:
       - lld_macro: '{#PSU}'
         path: $.name
@@ -1369,7 +1384,10 @@ zabbix_export:
       key: intersight.port.discovery
       master_item:
         key: intersight.raw
-      lifetime: 7d
+      lifetime_type: DELETE_AFTER
+      lifetime: '{$INTERSIGHT.LLD.LOST.DELETE}'
+      enabled_lifetime_type: DISABLE_AFTER
+      enabled_lifetime: '{$INTERSIGHT.LLD.LOST.DISABLE}'
       filter:
         evaltype: AND
         conditions:
@@ -1690,6 +1708,12 @@ zabbix_export:
     - macro: '{$INTERSIGHT.PORT.ROLE.NOT_MATCHES}'
       value: ^(unconfigured|vethernet|vfc|vnic|vhba)$
       description: 'Regex of port roles (hw.network.port.role) to ignore. Default: unconfigured and virtual interfaces, as excluded by the intersight-grafana dashboards.'
+    - macro: '{$INTERSIGHT.LLD.LOST.DISABLE}'
+      value: 1h
+      description: 'PSUs and ports no longer reported: items disabled after this long. Must be shorter than {$INTERSIGHT.LLD.LOST.DELETE} (Zabbix 7.0 "Low-level discovery").'
+    - macro: '{$INTERSIGHT.LLD.LOST.DELETE}'
+      value: 7d
+      description: 'PSUs and ports no longer reported: items deleted after this long. Must be longer than {$INTERSIGHT.LLD.LOST.DISABLE}.'
     - macro: '{$INTERSIGHT.ALARM.NODATA}'
       value: 2h
       description: An alarm item without value for this long closes its problem (alarm gone from Intersight without Cleared, or collector down). Must stay above the 1h heartbeat of the alarm items.
@@ -2125,7 +2149,10 @@ zabbix_export:
       key: intersight.psu.discovery
       master_item:
         key: intersight.raw
-      lifetime: 7d
+      lifetime_type: DELETE_AFTER
+      lifetime: '{$INTERSIGHT.LLD.LOST.DELETE}'
+      enabled_lifetime_type: DISABLE_AFTER
+      enabled_lifetime: '{$INTERSIGHT.LLD.LOST.DISABLE}'
       lld_macro_paths:
       - lld_macro: '{#PSU}'
         path: $.name
@@ -2202,7 +2229,10 @@ zabbix_export:
       key: intersight.port.discovery
       master_item:
         key: intersight.raw
-      lifetime: 7d
+      lifetime_type: DELETE_AFTER
+      lifetime: '{$INTERSIGHT.LLD.LOST.DELETE}'
+      enabled_lifetime_type: DISABLE_AFTER
+      enabled_lifetime: '{$INTERSIGHT.LLD.LOST.DISABLE}'
       filter:
         evaltype: AND
         conditions:
@@ -2523,6 +2553,12 @@ zabbix_export:
     - macro: '{$INTERSIGHT.PORT.ROLE.NOT_MATCHES}'
       value: ^(unconfigured|vethernet|vfc|vnic|vhba)$
       description: 'Regex of port roles (hw.network.port.role) to ignore. Default: unconfigured and virtual interfaces, as excluded by the intersight-grafana dashboards.'
+    - macro: '{$INTERSIGHT.LLD.LOST.DISABLE}'
+      value: 1h
+      description: 'PSUs and ports no longer reported: items disabled after this long. Must be shorter than {$INTERSIGHT.LLD.LOST.DELETE} (Zabbix 7.0 "Low-level discovery").'
+    - macro: '{$INTERSIGHT.LLD.LOST.DELETE}'
+      value: 7d
+      description: 'PSUs and ports no longer reported: items deleted after this long. Must be longer than {$INTERSIGHT.LLD.LOST.DISABLE}.'
     - macro: '{$INTERSIGHT.ALARM.NODATA}'
       value: 2h
       description: An alarm item without value for this long closes its problem (alarm gone from Intersight without Cleared, or collector down). Must stay above the 1h heartbeat of the alarm items.
