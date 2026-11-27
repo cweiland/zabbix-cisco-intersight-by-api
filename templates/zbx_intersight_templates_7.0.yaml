@@ -528,6 +528,11 @@ zabbix_export:
         priority: AVERAGE
         description: Use a maintenance period for planned shutdowns.
         manual_close: 'YES'
+      - uuid: b392220605b34e14b428c339f9106ddf
+        expression: last(/Cisco Intersight Server by push/intersight.power.state)=2
+        name: 'Intersight: unexpected power state reported'
+        priority: WARNING
+        description: 'Intersight returned an OperPowerState that is neither "on" nor "off" (value 2, "Other"). Only these two values have been seen, and the Intersight SDK sets no list of values: "The actual power state of the server." (CiscoDevNet/intersight-python, compute_physical_summary_all_of.py). Check the power state of the server in Intersight. The problem closes by itself when the value is "on" or "off" again.'
     discovery_rules:
     - uuid: 6736e75cfb88446d87ba7ede30c4fdff
       name: PSU discovery
@@ -960,6 +965,8 @@ zabbix_export:
         newvalue: 'Off'
       - value: '1'
         newvalue: 'On'
+      - value: '2'
+        newvalue: Other
     - uuid: ffba4406dac84bcda3811faf14ea7ada
       name: Link state
       mappings:
@@ -1733,6 +1740,8 @@ zabbix_export:
         newvalue: 'Off'
       - value: '1'
         newvalue: 'On'
+      - value: '2'
+        newvalue: Other
     - uuid: 00a0c02ca0a54a858d842ad2dc16f64a
       name: Link state
       mappings:
@@ -2576,6 +2585,8 @@ zabbix_export:
         newvalue: 'Off'
       - value: '1'
         newvalue: 'On'
+      - value: '2'
+        newvalue: Other
     - uuid: d567b014909947b9a1a8afdbfb93227a
       name: Link state
       mappings:
@@ -3679,7 +3690,8 @@ zabbix_export:
             setIfPresent(device, 'firmware', inventoryObject.Firmware);
             setIfPresent(device, 'mgmt_ip', inventoryObject.MgmtIpAddress);
             if (inventoryObject.OperPowerState) {
-                device.power_state = (String(inventoryObject.OperPowerState).toLowerCase() === 'on') ? 1 : 0;
+                var powerState = String(inventoryObject.OperPowerState).toLowerCase();
+                device.power_state = powerState === 'on' ? 1 : (powerState === 'off' ? 0 : 2);
             }
             device.chassis_moid = getEquipmentChassisMoid(inventoryObject);
             device.chassis_key = buildChassisKey(inventoryObject);

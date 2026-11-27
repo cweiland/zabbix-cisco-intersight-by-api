@@ -46,7 +46,7 @@ python3 tools/check_metrics_against_doc.py <Supported_Metrices.md>
 ```
 
 - `templates/*.yaml` is **generated**: never edit it by hand. CI fails if it is out of sync with `src/collector.js`.
-- **Zabbix limits item scripts to 65,535 characters.** The template embeds a comment-stripped copy of `src/collector.js` (`strip_comments()` in the generator; 62,201 characters with the paging sorted by Moid (truncation reported) and `is_blade` from `SourceObjectType`, i.e. about 3,300 left: any new function must stay compact). Keep comments in the source. The generator, `tools/validate_template.py` and `tests/embedded_script.test.js` all fail if the limit is exceeded.
+- **Zabbix limits item scripts to 65,535 characters.** The template embeds a comment-stripped copy of `src/collector.js` (`strip_comments()` in the generator; 62,265 characters with the paging sorted by Moid (truncation reported), `is_blade` from `SourceObjectType` and `power_state` 2 for an unexpected `OperPowerState`, i.e. about 3,270 left: any new function must stay compact). Keep comments in the source. The generator, `tools/validate_template.py` and `tests/embedded_script.test.js` all fail if the limit is exceeded.
 - UUIDs are derived from names (stable across regenerations). Renaming an item key changes its UUID.
 - `src/collector.js` must stay **ES5** (Duktape). No `let`, `const`, arrow functions or template strings. CI checks this.
 - The **JSON contract** between the collector and the templates is documented at the top of `src/collector.js`. Renaming a field requires changing the matching JSONPath in `tools/generate_templates.py`.
@@ -136,6 +136,11 @@ python3 tools/check_metrics_against_doc.py <Supported_Metrices.md>
 
 - `$orderby=Moid` is accepted together with `$top`, `$skip`, `$filter` and `$select`, on `compute/PhysicalSummaries` and `cond/Alarms`. The results come back sorted by Moid. So `listAllObjects` sorts every page by Moid (Cisco Intersight API Docs, "Query Language", "$top and $skip Query Options: Pagination": `$orderby` gives "a predictable order"; no default order stated). Moid is unique (SDK `mo_base_mo.py`: "The unique identifier of this Managed Object instance"); the SDK does not state that it never changes. A list whose last page read is full at `MAX_ITEMS_PER_LIST` is reported in `api.errors` and kept (`tests/inventory_paging.test.js`).
 - `SourceObjectType` is present on `compute/PhysicalSummaries`. Only two values were seen, `compute.RackUnit` and `compute.Blade`, with `$apply=groupby((SourceObjectType),...)` (SDK `compute_physical_summary_all_of.py`: "This feild will either be RackUnit or Blade"). `is_blade` reads it first; the chassis / model rule is only the fallback for other installations (`tests/blade_chassis_matching.test.js`).
+
+### Server power state (reported by the user, 2026-11-27)
+
+- `OperPowerState` of `compute/PhysicalSummaries`: only `on` and `off` were seen, with `$apply=groupby((OperPowerState),...)`. The SDK sets no list of values: `oper_power_state (str): The actual power state of the server.` (CiscoDevNet/intersight-python, `compute_physical_summary_all_of.py`).
+- Hence `power_state`: `on` 1, `off` 0 (case-insensitive), any other non-empty value 2 ("Other" in the value map "Power state"); absent or empty `OperPowerState`: not sent. Value 2 raises its own WARNING trigger "Intersight: unexpected power state reported" (no manual close), not "server is powered off" (`tests/power_state.test.js`).
 
 ### Alarms (reported by the user, 2026-11-26)
 
