@@ -184,6 +184,7 @@ Non collectés, disponibles dans le catalogue si besoin : GPU (`hw.gpu`), tensio
 | `hw.network.up` | `1` (0 ou 1) | 0/1 (valeur « Link state ») | aucune |
 | Énergie, coût, CO₂ | — | `Wh`, `!EUR`, `g` | calculés depuis la puissance |
 | Durées de l'API (cycle, signature) | — | `s` | mesurées par le collecteur |
+| Taille du plus gros JSON poussé | — | `B` | octets UTF-8, mesurés par le collecteur |
 
 **Pourcentages : la doc Cisco indique `%`, mais Intersight stocke des ratios 0–1** (0,1 = 10 %). C'est vérifié dans les données brutes d'une appliance, et cohérent avec les tableaux de bord intersight-grafana, qui multiplient par 100. D'où `{$INTERSIGHT.PERCENT.SCALE}` = 100. Si une version future renvoyait des valeurs 0–100, il suffirait de passer la macro à 1.
 
@@ -191,7 +192,7 @@ Non collectés, disponibles dans le catalogue si besoin : GPU (`hw.gpu`), tensio
 - un pourcentage supérieur à 100 % après mise à l'échelle → valeurs déjà en pourcent, passer l'échelle à 1 ;
 - un idle CPU ≤ 1 sur tous les FI avec l'échelle 1 → valeurs en 0–1, remettre l'échelle à 100.
 
-**Unités de base uniquement** : toutes les valeurs sont stockées en unité de base (W, Wh, g, s, bit/s), jamais en kWh, kg ou ms. L'historique, Grafana et les bases de séries temporelles externes reçoivent donc la valeur brute, sans conversion à refaire. Zabbix n'ajoute les préfixes K/M/G (base 10) qu'à l'affichage, par exemple 1 500 Wh affichés « 1.5 KWh » (doc Zabbix 7.0, « Unit symbols », « Item value suffixes »). Le préfixe `!` empêche cet ajout ; il ne sert que pour `!rpm` et `!EUR`, où un préfixe n'aurait pas de sens.
+**Unités de base uniquement** : toutes les valeurs sont stockées en unité de base (W, Wh, g, s, bit/s, octets B), jamais en kWh, kg ou ms. L'historique, Grafana et les bases de séries temporelles externes reçoivent donc la valeur brute, sans conversion à refaire. Zabbix n'ajoute les préfixes K/M/G (base 10) qu'à l'affichage, par exemple 1 500 Wh affichés « 1.5 KWh » (doc Zabbix 7.0, « Unit symbols », « Item value suffixes »). Exception : l'unité `B` (octets) utilise la base 2, 1 024 B affichés « 1 KB » et 1 536 B « 1.5 KB » (même page, norme JEDEC). Le préfixe `!` empêche cet ajout ; il ne sert que pour `!rpm` et `!EUR`, où un préfixe n'aurait pas de sens.
 
 ## Collecte des métriques
 
@@ -217,6 +218,7 @@ Si un de ces points est faux, l'item « API: last errors » affiche l'appel en c
 - **Double comptage possible** : si la puissance châssis inclut celle des blades, n'additionne pas les totaux « Chassis » et « Servers ». Les totaux sont volontairement séparés par classe.
 - **Énergie** : `Energy: last 24h` est calculée comme puissance moyenne sur 24 h × 24, en Wh. C'est exact sur une fenêtre glissante, à condition d'avoir 24 h d'historique. Le coût et le CO₂ divisent ces Wh par 1000, car les macros sont exprimées par kWh.
 - **Historique du script maître** : il est à 0 (le JSON peut être gros). Pour déboguer, utiliser le bouton « Test ».
+- **Taille de `intersight.raw`** : cet item Text est stocké en base (1 h d'historique). Zabbix tronque une valeur Text avant de la stocker : 65 536 octets en MySQL, 65 536 caractères en PostgreSQL (doc Zabbix 7.0, « Creating an item », « Text data limits ») ; une colonne `TEXT` MySQL contient au plus 65 535 octets (doc MySQL 8.0, « String Data Type Syntax »). L'item « API: largest pushed value » du template parent donne la taille, en octets UTF-8, du plus gros JSON poussé, et « API: device of the largest pushed value » le Moid de son équipement (hôte `intersight-<Moid>`). Un trigger WARNING se déclenche au-delà de `{$INTERSIGHT.RAW.SIZE.WARN}` (50 000 octets par défaut). Une taille en octets n'est jamais inférieure au nombre de caractères : le même seuil vaut pour les deux bases. Le plus gros JSON mesuré sur une appliance faisait 37 301 caractères (une FI). Non vérifié : si les items dépendants reçoivent la valeur avant ou après cette troncature.
 - **Température** : les triggers comparent chaque capteur à **ses propres** seuils (`limit_high_critical`, `limit_high_degraded`), sur les équipements qui les remontent. Les températures CPU ne remontent que si l'hôte est allumé.
 - **Alarme disparue sans Cleared** : si une alarme disparaît d'Intersight sans passer par Cleared, son problème se ferme après `{$INTERSIGHT.ALARM.NODATA}` (2 h par défaut) grâce à `nodata()`. Ses items sont ensuite désactivés puis supprimés par la découverte (`{$INTERSIGHT.ALARM.LOST.DISABLE}`, `{$INTERSIGHT.ALARM.LOST.DELETE}`). Un collecteur en panne pendant cette durée ferme aussi les problèmes d'alarme ; ils se rouvrent au retour des données.
 - **Trigger d'alarme indéterminé** : si l'item d'acquittement ou de suppression d'une alarme devient non supporté, son trigger peut devenir indéterminé, car l'expression lit ces items (pour les données opérationnelles).
@@ -228,7 +230,7 @@ Si un de ces points est faux, l'item « API: last errors » affiche l'appel en c
 - **Par type** (LLD sur les modèles, groupe `Intersight/<Classe>/<Modèle>`) : somme, moyenne, min, max, nombre d'équipements remontant, énergie, coût, CO₂, température max.
 - **Par classe** : puissance totale, énergie, coût et CO₂ sur 24 h.
 - **Alarmes** : un problème Zabbix par alarme Intersight, sur l'hôte de son équipement (ou sur l'hôte parent pour les alarmes de la plateforme), fermé quand l'alarme passe à Cleared.
-- **Santé** : appels, erreurs, durée, valeurs poussées et rejetées, absence de données, alarmes globales.
+- **Santé** : appels, erreurs, durée, valeurs poussées et rejetées, taille du plus gros JSON poussé, absence de données, alarmes globales.
 
 ## Performance de la signature hs2019
 

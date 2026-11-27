@@ -524,6 +524,19 @@ def fi_extra(T, tag):
     ]
 
 
+# Description of the trigger on intersight.api.push.max.bytes (sources: see the item, below).
+RAW_SIZE_DESCRIPTION = (
+    'The largest JSON pushed to the Text item intersight.raw (stored in the database) is above '
+    '{$INTERSIGHT.RAW.SIZE.WARN} bytes, in UTF-8. Zabbix truncates a Text value before storing it: '
+    '65536 bytes on MySQL, 65536 characters on PostgreSQL (Zabbix 7.0 manual, "Creating an item", '
+    '"Text data limits"); a MySQL TEXT column holds 65,535 bytes (MySQL 8.0 manual, "String Data Type '
+    'Syntax"). A truncated value is no longer valid JSON in the history; the effect on the dependent '
+    'items has not been tested. The device is in item "API: device of the largest pushed value" '
+    '(host intersight-<Moid>). When the measurements stop (push disabled, no device), the missing value is '
+    'discarded and the problem closes after 20 minutes without a measurement (nodata, Zabbix 7.0 manual, '
+    '"History functions").')
+
+
 # ------------------------------------------------------------------ parent template
 def parent(script):
     T = PARENT
@@ -572,6 +585,24 @@ def parent(script):
                            'Check "API: signing time" (ECDSA in pure JS) and the Intersight API latency.')]),
         dep(T, M, 'API: signing time (hs2019)', 'intersight.api.sign.time', '$.api.sign_s', units='s',
             tags=tag('health')),
+        # Size of the largest JSON pushed to the Text item intersight.raw, which is stored (1h).
+        # Zabbix 7.0 manual, "Creating an item", "Text data limits": a Text value is truncated
+        # before being stored, to 65536 bytes on MySQL, 65536 characters on PostgreSQL.
+        # history_text.value is t_text, i.e. text on MySQL (Zabbix 7.0 create/src/schema.tmpl,
+        # create/bin/gen_schema.pl): 65,535 bytes (MySQL 8.0 "String Data Type Syntax").
+        # Measured in UTF-8 bytes: never below the character count, so one threshold covers both.
+        # Both items discard a missing value (push disabled, no device).
+        dep(T, M, 'API: largest pushed value', 'intersight.api.push.max.bytes', '$.api.max_push_bytes', 'UNSIGNED',
+            units='B', tags=tag('health'),
+            # nodata(): without it the problem would never close once the measurements stop (push
+            # disabled, no device: the value is discarded, so last() keeps the old one). 20m as
+            # the "intersight.api.calls" trigger; {$INTERSIGHT.NODATA} is not on this template.
+            triggers=[trig(T, 'rawsize', 'last(/$T/intersight.api.push.max.bytes)>{$INTERSIGHT.RAW.SIZE.WARN}'
+                                         ' and nodata(/$T/intersight.api.push.max.bytes,20m)=0',
+                           'Intersight: pushed value larger than {$INTERSIGHT.RAW.SIZE.WARN} bytes', 'WARNING',
+                           RAW_SIZE_DESCRIPTION, opdata='Largest: {ITEM.LASTVALUE1}')]),
+        dep(T, M, 'API: device of the largest pushed value', 'intersight.api.push.max.moid', '$.api.max_push_moid',
+            'CHAR', tags=tag('health')),
         dep(T, M, 'Push: values accepted', 'intersight.push.sent', '$.push.sent', 'UNSIGNED', tags=tag('health')),
         dep(T, M, 'Push: values rejected', 'intersight.push.failed', '$.push.failed', 'UNSIGNED',
             tags=tag('health'),
@@ -715,6 +746,12 @@ def parent(script):
             macro('{$INTERSIGHT.CO2.G.KWH}', '0', 'Grid carbon intensity in gCO2/kWh. To fill in.'),
             macro('{$INTERSIGHT.ALARM.CLEARED.WINDOW}', '1d',
                   'Cleared alarms younger than this are still read, so that their problem closes.'),
+            macro('{$INTERSIGHT.RAW.SIZE.WARN}', '50000',
+                  'Warning threshold, in UTF-8 bytes, for the largest JSON pushed to intersight.raw. Zabbix truncates '
+                  'a stored Text value to 65536 bytes on MySQL and 65536 characters on PostgreSQL (Zabbix 7.0 manual, '
+                  '"Creating an item", "Text data limits"); a MySQL TEXT column holds 65,535 bytes (MySQL 8.0 manual, '
+                  '"String Data Type Syntax"). A byte count is never below the character count: one threshold '
+                  'covers both databases. Keep it below 65535.'),
         ] + host_lld_macros() + alarm_macros(),
         'valuemaps': alarm_valuemaps(T),
     }

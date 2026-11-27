@@ -38,10 +38,10 @@ request, so the essential rules are repeated here.
   use plain text search (`indexOf` / `includes`).
 - User-facing docs (README, CHANGELOG, docs/) in French; code and comments in English.
 - GitHub Actions: pin every action by full commit SHA, with the release in a comment.
-- Base units only: store W, Wh, g, s, bps, never kWh, kg or ms (Grafana and external TSDBs read
-  the stored value; Zabbix adds K/M/G prefixes on display only). Convert source values to the
-  base unit (ms -> s, bytes -> bits, 0-1 ratios -> %), never a base-unit value to a prefixed
-  unit. See "Units" in `CLAUDE.md`.
+- Base units only: store W, Wh, g, s, bps, B (data sizes), never kWh, kg, ms or KB (Grafana and
+  external TSDBs read the stored value; Zabbix adds K/M/G prefixes on display only, base 2 for B).
+  Convert source values to the base unit (ms -> s, throughput bytes -> bits, 0-1 ratios -> %),
+  never a base-unit value to a prefixed unit. See "Units" in `CLAUDE.md`.
 - A unit or scale change requires a new item key (new UUID, new series), with the old and new
   keys in the CHANGELOG: with the same key, the old history would be read in the new unit.
 - Never commit Cisco pages (`cisco-docs/`, `Supported_Metrices.md`) or the Zabbix manual PDF
