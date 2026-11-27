@@ -25,7 +25,7 @@ check('embedded script compiles', compiles);
 
 const scriptFile = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'zbx-')), 'embedded_collector.js');
 fs.writeFileSync(scriptFile, script);
-for (const testFile of ['alarms.test.js', 'auth_oauth.test.js', 'auth_rsa.test.js', 'host_lld_failed_inventory.test.js', 'push_size.test.js', 'scenario_appliance_metrics.test.js', 'scenario_support_matrix.test.js', 'telemetry_failure_components.test.js', 'telemetry_match_by_host_id.test.js', 'units.test.js']) {
+for (const testFile of ['alarms.test.js', 'auth_oauth.test.js', 'auth_rsa.test.js', 'blade_chassis_matching.test.js', 'host_lld_failed_inventory.test.js', 'inventory_paging.test.js', 'push_size.test.js', 'scenario_appliance_metrics.test.js', 'scenario_support_matrix.test.js', 'telemetry_failure_components.test.js', 'telemetry_match_by_host_id.test.js', 'units.test.js']) {
   let passed = true;
   try {
     execFileSync(process.execPath, [path.join(__dirname, testFile)], { encoding: 'utf8', timeout: 240000, env: Object.assign({}, process.env, { COLLECTOR_CODE_FILE: scriptFile }) });
