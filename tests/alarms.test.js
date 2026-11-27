@@ -11,6 +11,8 @@ const toJson = JSON.stringify;
 const alarmRequests = [];
 let pushedValues = [];
 let failAlarmRequest = false;   // second scenario: cond/Alarms answers HTTP 500
+let failedInventoryPath = null;  // third scenario: this inventory list answers HTTP 500
+const verified = [];             // one entry per Intersight request: signature valid or not
 
 const FIXTURE_ALARMS = [
   // Acknowledged and not suppressed: still pushed with ack=1.
@@ -38,9 +40,25 @@ global.HttpRequest = function () { this.headers = []; };
 HttpRequest.prototype.clearHeader = function () { this.headers = []; };
 HttpRequest.prototype.addHeader = function (header) { this.headers.push(header); };
 HttpRequest.prototype.getStatus = function () { return this.status; };
+// Checks the hs2019 signature of one request against the test key (as in
+// tests/scenario_appliance_metrics.test.js).
+HttpRequest.prototype.verifySignature = function (method, url) {
+  const byName = {};
+  this.headers.forEach(header => {
+    const separator = header.indexOf(': ');
+    byName[header.slice(0, separator).toLowerCase()] = header.slice(separator + 2);
+  });
+  const signingString = `(request-target): ${method} ${url.replace('https://intersight.com', '')}\n` +
+    `host: ${byName.host}\ndate: ${byName.date}\ndigest: ${byName.digest}`;
+  const signature = /signature="([^"]+)"/.exec(byName.authorization || '');
+  verified.push(!!signature && crypto.verify('sha256', Buffer.from(signingString), ecKey.publicKey,
+    Buffer.from(signature[1], 'base64')));
+};
 HttpRequest.prototype.get = function (url) {
   this.status = 200;
+  this.verifySignature('get', url);
   if (url.includes('cond/Alarms') && failAlarmRequest) { this.status = 500; return 'fixture server error'; }
+  if (failedInventoryPath && url.includes(failedInventoryPath)) { this.status = 500; return 'fixture server error'; }
   if (url.includes('PhysicalSummaries')) return toJson({ Results: [{ Moid: 'srv1', Name: 'fixture-server', Model: 'UCSC-C220-M6S', ChassisId: '0' }] });
   if (url.includes('Chasses')) return toJson({ Results: [{ Moid: 'cha1', Name: 'fixture-chassis', Model: 'UCSX-9508' }] });
   if (url.includes('ElementSummaries')) return toJson({ Results: [{ Moid: 'fi1', Name: 'fixture-fi', Model: 'UCS-FI-6454' }] });
@@ -53,6 +71,7 @@ HttpRequest.prototype.post = function (url, body) {
     pushedValues = JSON.parse(body).params;
     return toJson({ result: { data: pushedValues.map(() => ({ itemid: '1' })) } });
   }
+  this.verifySignature('post', url);
   return '[]';
 };
 
@@ -122,6 +141,22 @@ check('failed alarm request: no platform_alarms in the result', !('platform_alar
 check('failed alarm request: error reported in api.errors',
   failedOutput.api.errors.some(e => e.startsWith('alarms: ') && e.includes('cond/Alarms') && e.includes('HTTP 500')));
 
+// --- Third scenario: one inventory list (chassis) fails, alarms are read
+failAlarmRequest = false;
+failedInventoryPath = 'equipment/Chasses';
+pushedValues = [];
+const partialOutput = runCollector();
+check('failed chassis list: no platform_alarms in the result (the chassis alarm would land there)',
+  !('platform_alarms' in partialOutput));
+check('failed chassis list: alarms of the devices read are still pushed',
+  pushedValues.length === 2 && alarmIds(pushedDevice('srv1').alarms) === 'alarm-cleared,alarm-srv' &&
+  alarmIds(pushedDevice('fi1').alarms) === 'alarm-fi');
+check('failed chassis list: error reported in api.errors',
+  partialOutput.api.errors.some(e => e.startsWith('chassis: ') && e.includes('HTTP 500')));
+
+check('signatures of every Intersight request verified (' + verified.filter(Boolean).length + '/' + verified.length + ')',
+  verified.length > 0 && verified.every(Boolean));
+
 // --- Template
 const yaml = fs.readFileSync(path.join(__dirname, '..', 'templates', 'zbx_intersight_templates_7.0.yaml'), 'utf8');
 const templateNames = ['Cisco Intersight Server by push', 'Cisco Intersight Chassis by push',
@@ -136,9 +171,13 @@ const ruleOf = name => {
   const next = block.slice(start + 1).search(/\n    - uuid: /);
   return next < 0 ? block.slice(start) : block.slice(start, start + 1 + next);
 };
+// Plain text search (no regular expression built from the name): the "value:" line that
+// follows "macro: '{$<name>}'".
 const macroValue = (block, name) => {
-  const match = new RegExp("macro: '\\{\\$" + name.replace(/\./g, '\\.') + "\\}'\\n\\s+value: (\\S+)").exec(block);
-  return match ? match[1].replace(/'/g, '') : null;
+  const start = block.indexOf("macro: '{$" + name + "}'\n");
+  if (start < 0) return null;
+  const valueLine = block.slice(start).split('\n')[1].trim();
+  return valueLine.startsWith('value: ') ? valueLine.slice('value: '.length).replace(/'/g, '') : null;
 };
 const durationSeconds = text => {
   const match = /^(\d+)([smhdw]?)$/.exec(text || '');

@@ -63,7 +63,8 @@
  *      alarms {critical, warning, info}, push {enabled, sent, failed},
  *      servers[], chassis[], fis[], models [ {class, model, group} ],
  *      platform_alarms [ alarm ]   alarms on no known device (empty AncestorMoId, e.g.
- *                                  iam.ApiKey, or an ancestor that is not a device read here)
+ *                                  iam.ApiKey, or an ancestor that is not a device read here);
+ *                                  absent if the alarm request or an inventory list failed
  *    alarms {critical, warning, info} counts only open, unacknowledged alarms (as before).
  *
  *  METRIC SOURCES (rule: no inferred field name)
@@ -1555,6 +1556,10 @@ attachBladesToChassis(chassisDevices, serverDevices);
 
 var allDevices = serverDevices.concat(chassisDevices, fabricInterconnectDevices);
 var platformAlarms = attachAlarmsToDevices(alarmObjects, allDevices);
+// A failed server, chassis or FI list would move the alarms of its devices to platform_alarms
+// until the next run: platform_alarms is then not sent, so the parent alarm LLD discards the
+// value. Alarms of the devices that were read are still pushed.
+var inventoryComplete = serverInventory !== null && chassisInventory !== null && fabricInterconnectInventory !== null;
 
 // --- Push to the discovered hosts
 var pushResult = pushDevicesToZabbix(allDevices, collectionTime);
@@ -1592,5 +1597,5 @@ return JSON.stringify({
     chassis: chassisDevices,
     fis: fabricInterconnectDevices,
     models: listDistinctModels(allDevices),
-    platform_alarms: platformAlarms === null ? undefined : platformAlarms
+    platform_alarms: (platformAlarms === null || !inventoryComplete) ? undefined : platformAlarms
 });

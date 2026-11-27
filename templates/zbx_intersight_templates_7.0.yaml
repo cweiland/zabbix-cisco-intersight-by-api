@@ -3800,6 +3800,7 @@ zabbix_export:
 
         var allDevices = serverDevices.concat(chassisDevices, fabricInterconnectDevices);
         var platformAlarms = attachAlarmsToDevices(alarmObjects, allDevices);
+        var inventoryComplete = serverInventory !== null && chassisInventory !== null && fabricInterconnectInventory !== null;
 
         var pushResult = pushDevicesToZabbix(allDevices, collectionTime);
         var deviceIndex;
@@ -3831,7 +3832,7 @@ zabbix_export:
             chassis: chassisDevices,
             fis: fabricInterconnectDevices,
             models: listDistinctModels(allDevices),
-            platform_alarms: platformAlarms === null ? undefined : platformAlarms
+            platform_alarms: (platformAlarms === null || !inventoryComplete) ? undefined : platformAlarms
         });
       parameters:
       - name: auth
