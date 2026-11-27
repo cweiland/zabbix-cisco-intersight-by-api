@@ -71,7 +71,7 @@ Le template parent fait **tous** les appels Intersight, puis pousse un JSON par 
 ## Flux de données
 
 1. Le script `intersight.collect` lit l'inventaire : `compute/PhysicalSummaries`, `equipment/Chasses`, `network/ElementSummaries` et `cond/Alarms` (une seule requête : alarmes non Cleared, plus les alarmes Cleared récentes ; voir « Alarmes Intersight »).
-2. Il lit la télémétrie Druid via `/api/v1/telemetry/TimeSeries` (requêtes `groupBy`), groupée par `host.type` + `host.name` : 9 instruments (voir « Métriques collectées »).
+2. Il lit la télémétrie Druid via `/api/v1/telemetry/TimeSeries` (requêtes `groupBy`), groupée par `host.id`, `host.type` et `host.name` : 9 instruments (voir « Métriques collectées »). Chaque ligne est rattachée à l'équipement dont le `Moid` est le dernier segment de `host.id` (voir « Limites connues », « Jointure »).
 3. Il signe chaque requête avec ta **clé API v3** (`hs2019`, ECDSA P-256). Zabbix ne sait faire que du RSA, donc l'ECDSA est implémenté en JavaScript pur dans le script (nonce déterministe RFC 6979). Les modes `rsa` (clé v2) et `oauth` restent disponibles via `{$INTERSIGHT.AUTH}`.
 4. Il pousse les valeurs vers les hosts `intersight-<Moid>` par `history.push`.
 5. Il renvoie un JSON qui alimente les LLD (host prototypes), les items de santé et les agrégats.
@@ -161,7 +161,7 @@ Un équipement absent de la liste de support d'une métrique ne renvoie aucune l
 
 **Sources autres que la doc Cisco**, toutes deux reprises des tableaux de bord Grafana [intersight-grafana](https://github.com/3191110276/intersight-grafana) (dépôt communautaire, fourni « best-effort ») :
 - **Formule du débit** : `somme(hw.network.io_receive) / somme(hw.network.io_receive_duration) × 8` en bits/s. Les champs sont documentés, mais pas la formule ; elle est cohérente avec la doc, qui exprime la vitesse de lien en octets par seconde.
-- **Regroupement par attributs « à points »** (`host.name`, `host.type`, `hw.network.port.role`) via des colonnes virtuelles `nested-field`. C'est le seul point non validé qui conditionne toute la télémétrie : si les items de télémétrie restent tous vides alors que l'inventaire remonte, c'est la première piste à vérifier.
+- **Regroupement par attributs « à points »** (`host.name`, `host.type`, `host.id`, `hw.network.port.role`) via des colonnes virtuelles `nested-field`. C'est le seul point non validé qui conditionne toute la télémétrie : si les items de télémétrie restent tous vides alors que l'inventaire remonte, c'est la première piste à vérifier.
 
 **Ressources perdues (PSU et ports).** Une PSU ou un port qui n'est plus remonté est désactivé après `{$INTERSIGHT.LLD.LOST.DISABLE}` (`1h` par défaut), puis supprimé après `{$INTERSIGHT.LLD.LOST.DELETE}` (`7d` par défaut). Il est réactivé s'il est de nouveau découvert entre-temps (doc Zabbix 7.0, « Low-level discovery »). Avant ce réglage, la désactivation était immédiate (valeur par défaut à l'import), si bien qu'un seul cycle sans télémétrie, où le collecteur envoie des listes vides, désactivait toutes les PSU et tous les ports de l'équipement jusqu'au cycle suivant. Si la requête de télémétrie `hw.power_supply` ou `hw.network` échoue, le collecteur n'envoie pas du tout la liste `psus` ou `ports`, et la règle ignore la valeur (`DISCARD_VALUE`) : aucun composant n'est déclaré perdu, et l'erreur apparaît dans « API: last errors ». **La suppression doit rester plus longue que la désactivation.** Chaque champ de la règle ne contient qu'une macro (doc Zabbix 7.0, « User macros supported by location », note 1) : pour changer les délais, modifie la valeur des macros.
 
@@ -214,7 +214,8 @@ Si un de ces points est faux, l'item « API: last errors » affiche l'appel en c
 
 ## Limites connues
 
-- **Jointure** : la télémétrie est rattachée à l'inventaire par `host.type` + `host.name`. Un châssis et un serveur de même nom sont donc bien distingués. En revanche, deux serveurs de même nom partagent encore leurs métriques, car Cisco précise que `host.name` n'est pas garanti unique.
+- **Jointure** : la télémétrie est rattachée à l'inventaire par `host.id`, « a globally unique host ID », qui est le chemin API de la ressource (doc Cisco DevNet, « Host Power and Status »). Son dernier segment est le `Moid` de l'équipement : deux équipements de même nom sont donc bien distingués. Vérifié sur une appliance pour `hw.host` et `hw.power_supply` seulement.
+  - **Repli par nom** : une autre installation peut ne pas renvoyer `host.id`. Une ligne sans `host.id` (absent ou vide) est rattachée par classe (`host.type`) et nom (`host.name`), ou par nom seul si `host.type` est inconnu. Cisco précise que `host.name` n'est pas garanti unique : si ce nom est porté par plusieurs équipements (de la même classe, ou de n'importe quelle classe quand `host.type` est inconnu), la ligne est ignorée. Ces homonymes ne reçoivent alors pas cette télémétrie, plutôt que des valeurs mélangées.
 - **Double comptage possible** : si la puissance châssis inclut celle des blades, n'additionne pas les totaux « Chassis » et « Servers ». Les totaux sont volontairement séparés par classe.
 - **Énergie** : `Energy: last 24h` est calculée comme puissance moyenne sur 24 h × 24, en Wh. C'est exact sur une fenêtre glissante, à condition d'avoir 24 h d'historique. Le coût et le CO₂ divisent ces Wh par 1000, car les macros sont exprimées par kWh.
 - **Historique du script maître** : il est à 0 (le JSON peut être gros). Pour déboguer, utiliser le bouton « Test ».

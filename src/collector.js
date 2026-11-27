@@ -6,8 +6,10 @@
  *  WHAT IT DOES (one run, every 5 minutes)
  *    1. Reads the inventory from the Intersight REST API:
  *         servers (rack + blade), chassis, Fabric Interconnects, alarms (open + recently cleared).
- *    2. Reads telemetry (Apache Druid "groupBy" queries), grouped by device type and name:
- *         power, temperatures, fans, power supplies, memory, CPU, network.
+ *    2. Reads telemetry (Apache Druid "groupBy" queries), grouped by host.id, host.type and
+ *       host.name: power, temperatures, fans, power supplies, memory, CPU, network. Each row
+ *       goes to the device whose Moid is the last segment of host.id; rows without host.id
+ *       fall back to (class, name), and are ignored when that name is not unique.
  *    3. Builds one JSON object per device and pushes it, through the Zabbix API method
  *       history.push, to the trapper item "intersight.raw" of the discovered host
  *       "intersight-<Moid>".
@@ -169,9 +171,10 @@ var ZABBIX_RAW_ITEM_KEY = 'intersight.raw';
 // Host group names used by the per-model aggregates (must match the group prototypes).
 var HOST_GROUP_BY_CLASS = { server: 'Servers', chassis: 'Chassis', fi: 'FI' };
 
-// Telemetry attribute "host.type" -> device class. Telemetry is matched to the
-// inventory by (class, name): "host.name" alone is not unique (Cisco doc), and a
-// chassis may share its name with a server.
+// Telemetry attribute "host.type" -> device class. Telemetry is matched to the inventory
+// by the device Moid read from "host.id" (Cisco doc: "a globally unique host ID"). Only
+// rows without host.id fall back to (class, name): "host.name" alone is not unique (Cisco
+// doc), and a chassis may share its name with a server. See buildMoidByNameKey().
 var DEVICE_CLASS_BY_HOST_TYPE = {
     'compute.Blade': 'server',
     'compute.RackUnit': 'server',
@@ -182,7 +185,8 @@ var UNKNOWN_DEVICE_CLASS = 'any';
 
 // Attributes every telemetry query is grouped by (component attribute and per-query
 // extraAttributes are added to these). All are listed in docs/intersight_metrics.json.
-var GROUP_BY_ATTRIBUTES = ['host.name', 'host.type'];
+// host.id identifies the device; host.name and host.type are kept for the name fallback.
+var GROUP_BY_ATTRIBUTES = ['host.name', 'host.type', 'host.id'];
 
 // Run statistics, reported in the "api" section of the output.
 var runStartTime = new Date().getTime();
@@ -1215,28 +1219,61 @@ var TELEMETRY_QUERIES = [
     }
 ];
 
-// Key of a device in the telemetry map: "<class>|<name>".
+// Key of the name fallback: "<class>|<name>", or "any|<name>" (any class).
 function buildTelemetryKey(deviceClass, deviceName) {
     return deviceClass + '|' + deviceName;
+}
+
+// Name fallback for telemetry rows without host.id: { "<class>|<name>": Moid,
+// "any|<name>": Moid }, built from the inventory lists (read before the telemetry).
+// Kept because this repository is public: another Intersight may not return host.id.
+// A name held by two devices (in that class, or in any class for "any|") maps to ''
+// (ambiguous): homonyms without host.id get no telemetry rather than mixed data. Devices
+// of a failed list are not in the map, so their rows are ignored.
+function buildMoidByNameKey(inventoryByClass) {
+    var moidByNameKey = {}, deviceClass, list, index, moid, name;
+    function addKey(key) {
+        // The same object listed twice is not a homonym.
+        moidByNameKey[key] = moidByNameKey.hasOwnProperty(key) && moidByNameKey[key] !== moid ? '' : moid;
+    }
+    for (deviceClass in inventoryByClass) {
+        list = inventoryByClass[deviceClass] || [];
+        for (index = 0; index < list.length; index++) {
+            moid = list[index].Moid;
+            name = list[index].Name || moid;
+            addKey(buildTelemetryKey(deviceClass, name));
+            addKey(buildTelemetryKey(UNKNOWN_DEVICE_CLASS, name));
+        }
+    }
+    return moidByNameKey;
 }
 
 // Instruments whose query failed in this run: { "hw.power_supply": true }. A query that
 // succeeds with no row is not a failure. Read by buildCommonDeviceFields().
 var failedTelemetryInstruments = {};
 
-// Runs every telemetry query. Returns { "<class>|<name>": deviceTelemetry }.
-// Rows are grouped by "host.name" and "host.type"; when host.type is missing, the
-// class is "any" and the lookup falls back to the name only.
-function collectTelemetryByDeviceKey(timeInterval) {
-    var telemetryByDeviceKey = {};
+// Runs every telemetry query. Returns { "<Moid>": deviceTelemetry }.
+// Each row is resolved to a device Moid when it is read, so that one device gets all its
+// rows even if some instruments return host.id and others do not.
+function collectTelemetryByDeviceMoid(timeInterval, moidByNameKey) {
+    var telemetryByDeviceMoid = {};
 
-    function getDeviceTelemetry(row) {
+    // Moid of the device of one row: last segment of host.id ("/api/v1/<space>/<class>/<Moid>",
+    // seen on the user's appliance), else the name fallback (class from host.type, "any" when
+    // host.type is unknown). '' = no device: the row is ignored. A Moid of no inventoried
+    // device is stored but read by no device.
+    function resolveRowMoid(row) {
+        var hostId = row[rowFieldName('host.id')];
+        if (hostId) { return String(hostId).split('/').pop(); }
         var deviceClass = DEVICE_CLASS_BY_HOST_TYPE[row[rowFieldName('host.type')]] || UNKNOWN_DEVICE_CLASS;
-        var key = buildTelemetryKey(deviceClass, row[rowFieldName('host.name')]);
-        if (!telemetryByDeviceKey[key]) {
-            telemetryByDeviceKey[key] = { powerSuppliesByName: {}, portsByName: {}, dimmsWithErrors: [] };
+        return moidByNameKey[buildTelemetryKey(deviceClass, row[rowFieldName('host.name')])] || '';
+    }
+
+    function getDeviceTelemetry(moid) {
+        if (!telemetryByDeviceMoid[moid]) {
+            telemetryByDeviceMoid[moid] = { powerSuppliesByName: {}, portsByName: {}, dimmsWithErrors: [] };
         }
-        return telemetryByDeviceKey[key];
+        return telemetryByDeviceMoid[moid];
     }
 
     function runOneQuery(query) {
@@ -1245,11 +1282,13 @@ function collectTelemetryByDeviceKey(timeInterval) {
         if (query.perComponent) { attributes.push(CONFIG.druidComponentDimension); }
         attributes = attributes.concat(query.extraAttributes || []);
         var rows = runTelemetryGroupBy(dataSource, query.instrument, attributes, query.aggregations, timeInterval);
-        var rowIndex, row, componentName;
+        var rowIndex, row, componentName, moid;
         for (rowIndex = 0; rowIndex < rows.length; rowIndex++) {
             row = rows[rowIndex];
+            moid = resolveRowMoid(row);
+            if (!moid) { continue; }
             componentName = query.perComponent ? (row[rowFieldName(CONFIG.druidComponentDimension)] || ('component' + rowIndex)) : null;
-            query.storeRow(row, getDeviceTelemetry(row), componentName);
+            query.storeRow(row, getDeviceTelemetry(moid), componentName);
         }
     }
 
@@ -1272,7 +1311,7 @@ function collectTelemetryByDeviceKey(timeInterval) {
         collectedErrors.push('units: system.cpu.utilization_idle <= 1 on every FI: if the Intersight UI shows ' +
             'an idle CPU near 100 %, the values are 0-1 ratios: set {$INTERSIGHT.PERCENT.SCALE} to 100');
     }
-    return telemetryByDeviceKey;
+    return telemetryByDeviceMoid;
 }
 
 // =====================================================================================
@@ -1299,7 +1338,7 @@ function buildChassisKey(inventoryObject) {
 }
 
 // Fields shared by servers, chassis and Fabric Interconnects.
-function buildCommonDeviceFields(deviceClass, inventoryObject, telemetryByDeviceKey) {
+function buildCommonDeviceFields(deviceClass, inventoryObject, telemetryByDeviceMoid) {
     var device = {
         moid: inventoryObject.Moid,
         name: inventoryObject.Name || inventoryObject.Moid,
@@ -1307,8 +1346,8 @@ function buildCommonDeviceFields(deviceClass, inventoryObject, telemetryByDevice
         model: inventoryObject.Model || 'unknown'
     };
     var alarmSummary = inventoryObject.AlarmSummary || {};
-    var telemetry = telemetryByDeviceKey[buildTelemetryKey(deviceClass, device.name)] ||
-        telemetryByDeviceKey[buildTelemetryKey(UNKNOWN_DEVICE_CLASS, device.name)];
+    // Rows were resolved to a Moid by collectTelemetryByDeviceMoid() (host.id or name fallback).
+    var telemetry = telemetryByDeviceMoid[device.moid];
 
     setIfPresent(device, 'serial', inventoryObject.Serial);
     setIfPresent(device, 'alarm_critical', numberOrNull(alarmSummary.Critical));
@@ -1354,8 +1393,8 @@ function buildCommonDeviceFields(deviceClass, inventoryObject, telemetryByDevice
     return device;
 }
 
-function buildServerDevice(inventoryObject, telemetryByDeviceKey) {
-    var device = buildCommonDeviceFields('server', inventoryObject, telemetryByDeviceKey);
+function buildServerDevice(inventoryObject, telemetryByDeviceMoid) {
+    var device = buildCommonDeviceFields('server', inventoryObject, telemetryByDeviceMoid);
     setIfPresent(device, 'firmware', inventoryObject.Firmware);
     setIfPresent(device, 'mgmt_ip', inventoryObject.MgmtIpAddress);
     if (inventoryObject.OperPowerState) {
@@ -1369,24 +1408,24 @@ function buildServerDevice(inventoryObject, telemetryByDeviceKey) {
     return device;
 }
 
-function buildChassisDevice(inventoryObject, telemetryByDeviceKey) {
-    var device = buildCommonDeviceFields('chassis', inventoryObject, telemetryByDeviceKey);
+function buildChassisDevice(inventoryObject, telemetryByDeviceMoid) {
+    var device = buildCommonDeviceFields('chassis', inventoryObject, telemetryByDeviceMoid);
     setIfPresent(device, 'oper_state', inventoryObject.OperState);
     device.chassis_key = buildChassisKey(inventoryObject);
     return device;
 }
 
-function buildFabricInterconnectDevice(inventoryObject, telemetryByDeviceKey) {
-    var device = buildCommonDeviceFields('fi', inventoryObject, telemetryByDeviceKey);
+function buildFabricInterconnectDevice(inventoryObject, telemetryByDeviceMoid) {
+    var device = buildCommonDeviceFields('fi', inventoryObject, telemetryByDeviceMoid);
     setIfPresent(device, 'firmware', inventoryObject.Version || inventoryObject.Firmware);
     setIfPresent(device, 'mgmt_ip', inventoryObject.OutOfBandIpAddress || inventoryObject.ManagementIpAddress);
     return device;
 }
 
-function buildDeviceList(inventoryObjects, buildFunction, telemetryByDeviceKey) {
+function buildDeviceList(inventoryObjects, buildFunction, telemetryByDeviceMoid) {
     var devices = [], index;
     for (index = 0; inventoryObjects && index < inventoryObjects.length; index++) {
-        devices.push(buildFunction(inventoryObjects[index], telemetryByDeviceKey));
+        devices.push(buildFunction(inventoryObjects[index], telemetryByDeviceMoid));
     }
     return devices;
 }
@@ -1601,12 +1640,14 @@ if (serverInventory === null && chassisInventory === null && fabricInterconnectI
 var collectionTime = new Date();
 var telemetryInterval = new Date(collectionTime.getTime() - CONFIG.telemetryWindowMinutes * 60000).toISOString() +
     '/' + collectionTime.toISOString();
-var telemetryByDeviceKey = collectTelemetryByDeviceKey(telemetryInterval);
+// Name fallback for the telemetry rows without host.id (failed lists: null, no device).
+var moidByNameKey = buildMoidByNameKey({ server: serverInventory, chassis: chassisInventory, fi: fabricInterconnectInventory });
+var telemetryByDeviceMoid = collectTelemetryByDeviceMoid(telemetryInterval, moidByNameKey);
 
 // --- Device objects
-var serverDevices = buildDeviceList(serverInventory, buildServerDevice, telemetryByDeviceKey);
-var chassisDevices = buildDeviceList(chassisInventory, buildChassisDevice, telemetryByDeviceKey);
-var fabricInterconnectDevices = buildDeviceList(fabricInterconnectInventory, buildFabricInterconnectDevice, telemetryByDeviceKey);
+var serverDevices = buildDeviceList(serverInventory, buildServerDevice, telemetryByDeviceMoid);
+var chassisDevices = buildDeviceList(chassisInventory, buildChassisDevice, telemetryByDeviceMoid);
+var fabricInterconnectDevices = buildDeviceList(fabricInterconnectInventory, buildFabricInterconnectDevice, telemetryByDeviceMoid);
 
 assignUniqueDisplayNames(serverDevices);
 assignUniqueDisplayNames(chassisDevices);

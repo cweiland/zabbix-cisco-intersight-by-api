@@ -23,7 +23,9 @@ HttpRequest.prototype.post=function(u,b){
   if(u.includes('api_jsonrpc'))return R({result:{data:[]}});
   this._v('post',u,b);const q=JSON.parse(b),ins=q.filter.value;ds[ins]=q.dataSource;
   const ag=q.aggregations.map(a=>a.name);
-  const row=(n,t,v,c)=>{const e={[q.dimensions[0]]:n,[q.dimensions[1]]:t};if(c)e[q.dimensions[2]]=c;ag.forEach((a,i)=>{if(v[i]!==undefined)e[a]=v[i];});return {event:e};};
+  // No host_id in these rows: they are matched through the (class, name) fallback.
+  const d=q.dimensions.filter(x=>x!=='host_id');
+  const row=(n,t,v,c)=>{const e={[d[0]]:n,[d[1]]:t};if(c)e[d[2]]=c;ag.forEach((a,i)=>{if(v[i]!==undefined)e[a]=v[i];});return {event:e};};
   const RK='compute.RackUnit',FI='network.Element';
   switch(ins){
    case 'hw.host': return R([row('rack-1',RK,[4000,10,450])]);

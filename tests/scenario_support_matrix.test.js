@@ -24,7 +24,9 @@ HttpRequest.prototype.post=function(u,b){
   this._v('post',u,b);telemetryUrls.push(u);const q=JSON.parse(b),ins=q.filter.value;telemetryQueries.push(q);dataSources[ins]=q.dataSource;
   const ag=q.aggregations.map(a=>a.name);
   // Rows use the dimension names of the query (virtual columns host_name, host_type...).
-  const row=(name,type,vals,comp,role)=>{const e={[q.dimensions[0]]:name,[q.dimensions[1]]:type};if(comp)e[q.dimensions[2]]=comp;if(role)e[q.dimensions[3]]=role;ag.forEach((n,i)=>{if(vals[i]!==undefined)e[n]=vals[i];});return {event:e};};
+  // No host_id in these rows: they are matched through the (class, name) fallback.
+  const d=q.dimensions.filter(x=>x!=='host_id');
+  const row=(name,type,vals,comp,role)=>{const e={[d[0]]:name,[d[1]]:type};if(comp)e[d[2]]=comp;if(role)e[d[3]]=role;ag.forEach((n,i)=>{if(vals[i]!==undefined)e[n]=vals[i];});return {event:e};};
   if(ins==='hw.host')return R([row('ucs-1','compute.RackUnit',[4200,10,480]),row('blade-1','compute.Blade',[3500,10,400]),row('FI-A','network.Element',[5000,10,520])]); // no IMM chassis row
   if(ins==='hw.temperature')return R([row('ucs-1','compute.RackUnit',[72],'CPU1'),row('ucs-1','compute.RackUnit',[24],'Inlet'),row('ucs-1','equipment.Chassis',[30],'Inlet'),row('FI-A','network.Element',[58,75],'ASIC')]); // limit_high_critical: FI only
   if(ins==='hw.power_supply')return R([
@@ -51,7 +53,7 @@ check('FI port utilization 45.5% and 12%', by(fi.ports,'Eth1/1').util===45.5 && 
 check('throughput = bytes / duration * 8: rx 6e7/60*8 = 8 Mbps, tx 16 Mbps; link 25 Gbps', by(fi.ports,'Eth1/1').rx_bps===8e6 && by(fi.ports,'Eth1/1').tx_bps===1.6e7 && by(fi.ports,'Eth1/1').speed_bps===2.5e10);
 check('port role carried for the LLD filter', by(fi.ports,'Eth1/1').role==='eth_uplink' && by(fi.ports,'Eth1/2').role==='server');
 const hostQuery=telemetryQueries.find(q=>q.filter.value==='hw.host'), netQuery=telemetryQueries.find(q=>q.filter.value==='hw.network');
-check('dotted attributes grouped through nested-field virtual columns', JSON.stringify(hostQuery.dimensions)==='["host_name","host_type"]' && hostQuery.virtualColumns.every(v=>v.type==='nested-field') && hostQuery.virtualColumns.map(v=>v.columnName).join()==='host.name,host.type');
-check('network query groups by port name and hw.network.port.role', JSON.stringify(netQuery.dimensions)==='["host_name","host_type","name","hw_network_port_role"]');
+check('dotted attributes grouped through nested-field virtual columns', JSON.stringify(hostQuery.dimensions)==='["host_name","host_type","host_id"]' && hostQuery.virtualColumns.every(v=>v.type==='nested-field') && hostQuery.virtualColumns.map(v=>v.columnName).join()==='host.name,host.type,host.id');
+check('network query groups by port name and hw.network.port.role', JSON.stringify(netQuery.dimensions)==='["host_name","host_type","host_id","name","hw_network_port_role"]');
 check('telemetry queries go to /api/v1/telemetry/TimeSeries', telemetryUrls.length>0 && telemetryUrls.every(u=>u.endsWith('/api/v1/telemetry/TimeSeries')));
 check('no errors', out.api.errors.length===0);
