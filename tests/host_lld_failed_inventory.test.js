@@ -190,7 +190,7 @@ check('parent template: defaults DISABLE = 1h, DELETE = 7d', disable === '1h' &&
 check('parent template: default delete delay longer than disable delay', durationSeconds(remove) > durationSeconds(disable));
 
 // Chassis template: same two macros, for the Zabbix 7.4 nested "Blades discovery" rule added by
-// hand (docs/UPGRADE_7.4_FR.md). A chassis host does not inherit the parent template's macros.
+// hand (docs/UPGRADE_7.4.md). A chassis host does not inherit the parent template's macros.
 const chassisBlock = blockOf('Cisco Intersight Chassis by push');
 const chassisDisable = macroValue('INTERSIGHT.HOST.LOST.DISABLE', chassisBlock);
 const chassisDelete = macroValue('INTERSIGHT.HOST.LOST.DELETE', chassisBlock);

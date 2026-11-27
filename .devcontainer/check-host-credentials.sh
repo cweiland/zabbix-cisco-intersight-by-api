@@ -1,7 +1,7 @@
 #!/bin/bash
 # =====================================================================================
 #  Checks, from inside the dev container, that the host gives no GitHub credential
-#  through the Dev Containers relay (see docs/DEVCONTAINER_SECURITE_FR.md).
+#  through the Dev Containers relay (see docs/DEVCONTAINER_SECURITY.md).
 #  Prints only whether a credential came back, never the credential itself.
 #  Usage: bash .devcontainer/check-host-credentials.sh   (as "vscode", in the container)
 #  Exit status: 0 = no credential, 1 = a credential came back, 2 = could not be verified.
@@ -42,11 +42,11 @@ done <<< "$relay_scripts"
 unset answer
 
 if [ "$found" -eq 1 ]; then
-    echo "Remove the https://github.com entry from the host credential manager (docs/DEVCONTAINER_SECURITE_FR.md)."
+    echo "Remove the https://github.com entry from the host credential manager (docs/DEVCONTAINER_SECURITY.md)."
     exit 1
 fi
 if [ "$unverified" -eq 1 ]; then
-    echo "Could not verify: run it again; if it persists, check the host setup by hand (docs/DEVCONTAINER_SECURITE_FR.md)."
+    echo "Could not verify: run it again; if it persists, check the host setup by hand (docs/DEVCONTAINER_SECURITY.md)."
     exit 2
 fi
 echo "OK: no GitHub credential from the host (relay answered, without credential)"

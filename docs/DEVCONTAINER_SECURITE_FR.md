@@ -1,6 +1,8 @@
+Ce guide est disponible en : [English](DEVCONTAINER_SECURITY.md) | Français
+
 # Configurer sa machine pour le devcontainer
 
-Le devcontainer de ce dépôt (`.devcontainer/`) isole Claude Code et les tests : pare-feu sortant, pas de `sudo`, `.git` en lecture seule, etc. (voir la section « Environnement de développement » du [README](../README.md)).
+Le devcontainer de ce dépôt (`.devcontainer/`) isole Claude Code et les tests : pare-feu sortant, pas de `sudo`, `.git` en lecture seule, etc. (voir la section « Environnement de développement » du [README](../README-fr.md)).
 
 **Une partie de la protection ne peut pas être réglée depuis le dépôt : elle dépend de votre machine.** VS Code (extension Dev Containers) ouvre en effet un canal entre le conteneur et votre machine. Ce guide explique comment le neutraliser, puis comment vérifier que c'est fait.
 
@@ -65,10 +67,12 @@ Host github.com
 git remote set-url origin git@github.com:<propriétaire>/<dépôt>.git
 ```
 
-5. Vérifiez que l'agent SSH de Windows est arrêté :
+5. Désactivez et arrêtez l'agent SSH de Windows, puis vérifiez-le. Il faut une fenêtre PowerShell lancée avec « Exécuter en tant qu'administrateur » ([doc Microsoft, « Set-Service »](https://learn.microsoft.com/en-us/powershell/module/microsoft.powershell.management/set-service?view=powershell-5.1)) :
 
 ```powershell
-Get-Service ssh-agent      # attendu : Stopped (type de démarrage : Disabled)
+Set-Service -Name ssh-agent -StartupType Disabled
+Set-Service -Name ssh-agent -Status Stopped
+Get-Service ssh-agent | Select-Object Name, Status, StartType   # attendu : Stopped, Disabled
 ```
 
 **Pas d'agent SSH pendant que le conteneur tourne** : Dev Containers transmet automatiquement un agent SSH en marche au conteneur ([documentation VS Code](https://code.visualstudio.com/remote/advancedcontainers/sharing-git-credentials)). Sans agent, votre phrase de passe vous sera demandée à chaque push, et la clé reste sur votre machine.

@@ -256,17 +256,17 @@ def host_lld_macros():
 
 
 # Same macros on the chassis template, for the Zabbix 7.4 nested "Blades discovery" rule added by
-# hand (docs/UPGRADE_7.4_FR.md). That rule runs on the discovered chassis hosts, which only link
+# hand (docs/UPGRADE_7.4.md). That rule runs on the discovered chassis hosts, which only link
 # the chassis template: a macro of the parent template does not resolve there. Not used in 7.0.
 def nested_blade_lld_macros():
     return [
         macro('{$INTERSIGHT.HOST.LOST.DISABLE}', HOST_LOST_DISABLE_DEFAULT,
-              'Zabbix 7.4 nested blade discovery (docs/UPGRADE_7.4_FR.md): blade hosts no longer reported '
+              'Zabbix 7.4 nested blade discovery (docs/UPGRADE_7.4.md): blade hosts no longer reported '
               'disabled after this long. Keep the same value as on the template "' + PARENT + '": a chassis '
               'host does not inherit the macros of the parent template. Must be shorter than '
               '{$INTERSIGHT.HOST.LOST.DELETE} (Zabbix 7.0 "Low-level discovery").'),
         macro('{$INTERSIGHT.HOST.LOST.DELETE}', HOST_LOST_DELETE_DEFAULT,
-              'Zabbix 7.4 nested blade discovery (docs/UPGRADE_7.4_FR.md): blade hosts no longer reported '
+              'Zabbix 7.4 nested blade discovery (docs/UPGRADE_7.4.md): blade hosts no longer reported '
               'deleted after this long (history lost). Keep the same value as on the template "' + PARENT +
               '": a chassis host does not inherit the macros of the parent template. Must be longer than '
               '{$INTERSIGHT.HOST.LOST.DISABLE}.'),

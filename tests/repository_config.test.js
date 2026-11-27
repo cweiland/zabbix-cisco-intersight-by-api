@@ -1,6 +1,7 @@
 // Checks of the repository configuration that keeps the CI and the supply chain fixed:
 // GitHub Actions pinned by full commit SHA, read-only workflow token, no persisted checkout
-// credentials, Dependabot configured for every pinned ecosystem, security policy present.
+// credentials, Dependabot configured for every pinned ecosystem, security policy present,
+// AGPL-3.0-only stated in both READMEs and both contribution guides.
 // Usage: node tests/repository_config.test.js   (no dependency, any platform)
 const fs = require('fs'), path = require('path');
 
@@ -38,6 +39,10 @@ const licenseHash = require('crypto').createHash('sha256').update(fs.readFileSyn
 check('LICENSE is the unchanged AGPL-3.0 text from gnu.org',
   licenseHash === '0d96a4ff68ad6d4b6f1f30f713b18d5184912ba8dd389f86aa7710db079abcb0', licenseHash);
 check('README states AGPL-3.0-only', /AGPL-3\.0-only/.test(read('README.md')));
+// Same statement in the French README and in both contribution guides (plain text search).
+['README-fr.md', 'CONTRIBUTING.md', 'CONTRIBUTING-fr.md'].forEach(function (file) {
+  check(file + ' states AGPL-3.0-only', read(file).indexOf('AGPL-3.0-only') !== -1);
+});
 
 // The assistants' instruction files carry the essential rules themselves (VS Code does not
 // guarantee that a file linked from an instructions file reaches every request).

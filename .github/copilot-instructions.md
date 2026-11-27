@@ -40,7 +40,12 @@ request, so the essential rules are repeated here.
 - Run `tools/ci.sh` before proposing a commit; new behaviour gets a PASS/FAIL test.
 - Never build a RegExp from a string in tests (CodeQL "Incomplete string escaping", PR #17 and #19):
   use plain text search (`indexOf` / `includes`).
-- User-facing docs (README, CHANGELOG, docs/) in French; code and comments in English.
+- README, CONTRIBUTING and the guides of `docs/` exist in English and in French (`README.md` /
+  `README-fr.md`, `CONTRIBUTING.md` / `CONTRIBUTING-fr.md`, `docs/UPGRADE_7.4.md` /
+  `docs/UPGRADE_7.4_FR.md`, `docs/DEVCONTAINER_SECURITY.md` / `docs/DEVCONTAINER_SECURITE_FR.md`;
+  each file links to the other language): every change is made in both languages, in the same PR.
+  The CHANGELOG is in English only. `SECURITY.md` is a single file, English first, then a French
+  section. Answers to the maintainer stay in French; code and comments in English.
 - GitHub Actions: pin every action by full commit SHA, with the release in a comment.
 - Base units only: store W, Wh, g, s, bps, B (data sizes), never kWh, kg, ms or KB (Grafana and
   external TSDBs read the stored value; Zabbix adds K/M/G prefixes on display only, base 2 for B).
