@@ -35,7 +35,7 @@
  *    flat_servers   1 = all servers in the "servers" LLD, 0 = rack servers only (7.4 nested)
  *    alarm_cleared_window  how far back Cleared alarms are read, Zabbix time suffix (1d)
  *    percent_scale  multiplier turning the raw utilizations into % (default 100: Intersight
- *                   stores them as 0-1 ratios, checked in the raw data of the user's
+ *                   stores them as 0-1 ratios, checked in the raw data of a design
  *                   appliance, although Cisco's doc gives the unit "%")
  *    zbx_url        Zabbix API URL, used by history.push
  *    zbx_token      Zabbix API token, used by history.push
@@ -95,8 +95,10 @@
  *      - hw.cpu, hw.temperature.limit_high_degraded ... imm-blade-mqtt, imm-ism-rack-mqtt
  *      - hw.fan.speed.limit_low_critical ...... imm-chassis-mqtt-*, imm-ism-rack-mqtt
  *    Devices outside a metric's support list return no row: the item stays empty.
- *    Intersight Virtual Appliance: metrics need a metrics node (multi-node deployment)
- *    or the opt-in collection of a single-node deployment.
+ *    Intersight Virtual Appliance: metrics need metrics data collection: opt-in on a
+ *    standalone (single-node) deployment, a metrics node in 2- and 4-node clusters, not
+ *    supported in a 3-node cluster (Cisco "Cisco Intersight Virtual Appliance and Intersight
+ *    Assist Getting Started Guide", chapter "Overview", table "Deployments Options").
  *
  *  WHERE TO CHANGE THINGS
  *    - API endpoints ...................... INTERSIGHT_PATHS
@@ -126,7 +128,7 @@ var CONFIG = {
     // When false, blades are left out of the "servers" LLD: they are discovered under
     // their chassis instead (Zabbix 7.4 nested discovery). They are still pushed.
     discoverBladesAsServers: String(itemParameters.flat_servers) !== '0',
-    // Utilizations are stored by Intersight as 0-1 ratios (raw data checked on the user's
+    // Utilizations are stored by Intersight as 0-1 ratios (raw data checked on a design
     // appliance; the intersight-grafana dashboards also multiply them by 100), although
     // Cisco's doc gives the unit "%". checkPercentage() flags any value above 100 %.
     percentScale: parseFloat(itemParameters.percent_scale || '100'),
@@ -149,17 +151,17 @@ var INTERSIGHT_PATHS = {
 };
 
 // One request for all alarms: every alarm not Cleared, plus the alarms Cleared since
-// "since" (ISO date without milliseconds, e.g. 2026-11-25T00:00:00Z). Accepted by the user's
+// "since" (ISO date without milliseconds, e.g. 2026-11-25T00:00:00Z). Accepted by a design
 // appliance, which returned exactly the union of both sets.
 function buildAlarmFilter(since) {
     return "Severity ne 'Cleared' or (Severity eq 'Cleared' and LastTransitionTime gt " + since + ")";
 }
 // cond.Alarm fields (CiscoDevNet/intersight-python, intersight/model/cond_alarm.py), all
-// present on the user's appliance. AcknowledgeBy is left out on purpose: a person's name.
+// present on a design appliance. AcknowledgeBy is left out on purpose: a person's name.
 var ALARM_SELECT = 'Moid,Name,Code,Severity,Description,Acknowledge,Suppressed,AncestorMoId,' +
     'AncestorMoType,LastTransitionTime,CreationTime,AffectedMoDisplayName';
 // Severity -> number of the alarm items. Severity 'None' ("no severity" in the SDK) is not in
-// this table: such alarms are not pushed (user decision).
+// this table: such alarms are not pushed (maintainer decision).
 var ALARM_SEVERITY_CODES = { Cleared: 0, Info: 1, Warning: 2, Critical: 3 };
 
 // Page size for list requests (Intersight maximum is 1000).
@@ -917,7 +919,7 @@ function callIntersightApi(httpMethod, pathWithQuery, bodyObject) {
 // $orderby, an object could be skipped or read twice if the order changed between two pages.
 // Moid gives a total order because it is unique per object (CiscoDevNet/intersight-python,
 // mo_base_mo.py: "The unique identifier of this Managed Object instance"). A field such as
-// CreationTime, the doc's example, can have ties. Checked on the user's appliance, on
+// CreationTime, the doc's example, can have ties. Checked on a design appliance, on
 // compute/PhysicalSummaries and cond/Alarms: $orderby=Moid is accepted together with $top,
 // $skip, $filter and $select, and the results come back sorted by Moid.
 // At most MAX_ITEMS_PER_LIST objects are read. If the last page read is full, the list is
@@ -1283,7 +1285,7 @@ function collectTelemetryByDeviceMoid(timeInterval, moidByNameKey) {
     var telemetryByDeviceMoid = Object.create(null);
 
     // Moid of the device of one row: last segment of host.id ("/api/v1/<space>/<class>/<Moid>",
-    // seen on the user's appliance), else the name fallback (class from host.type, "any" when
+    // seen on a design appliance), else the name fallback (class from host.type, "any" when
     // host.type is unknown). '' = no device: the row is ignored. A Moid of no inventoried
     // device is stored but read by no device.
     function resolveRowMoid(row) {
@@ -1351,7 +1353,7 @@ function getEquipmentChassisMoid(inventoryObject) {
 
 // Fallback identifier of a chassis inside its UCS domain: "<registered device Moid>:<chassis id>".
 // Chassis ids restart at 1 in each domain, hence the domain prefix.
-// Seen on the user's appliance: the RegisteredDevice Moid of a blade differs from the one
+// Seen on a design appliance: the RegisteredDevice Moid of a blade differs from the one
 // of its chassis, so this key alone never matches; EquipmentChassis is used first.
 // Empty string for rack servers (no chassis).
 function buildChassisKey(inventoryObject) {
@@ -1424,7 +1426,7 @@ function buildServerDevice(inventoryObject, telemetryByDeviceMoid) {
     // Power state: "on" 1, "off" 0, any other value 2 (case-insensitive); absent or empty:
     // power_state not sent. OperPowerState is a free string, "The actual power state of the
     // server." (CiscoDevNet/intersight-python, compute_physical_summary_all_of.py), with no list
-    // of values; only "on" and "off" were seen on the user's appliance (groupby on
+    // of values; only "on" and "off" were seen on a design appliance (groupby on
     // OperPowerState). So an unexpected value is not shown as "Off" and does not raise the
     // "powered off" trigger: it has its own trigger. Plain === comparisons, no map indexed by
     // the API value.
@@ -1437,7 +1439,7 @@ function buildServerDevice(inventoryObject, telemetryByDeviceMoid) {
     // Blade (1) or rack server (0), used by the Zabbix 7.4 nested mode (flat_servers=0).
     // SourceObjectType comes first: "Stores the source object type. This feild will either be
     // RackUnit or Blade." (CiscoDevNet/intersight-python, compute_physical_summary_all_of.py);
-    // only compute.Blade and compute.RackUnit were seen on the user's appliance. The server
+    // only compute.Blade and compute.RackUnit were seen on a design appliance. The server
     // list is read without $select, so the field comes with the others.
     // Absent or other value (another installation may not return it), fallback rule:
     // blade = inside a chassis, or a blade model (UCSB-* / UCSX-*).
@@ -1543,7 +1545,7 @@ function countAlarmsBySeverity(alarmObjects) {
     return counts;
 }
 
-// Puts each alarm on the device whose Moid equals its AncestorMoId (checked on the user's
+// Puts each alarm on the device whose Moid equals its AncestorMoId (checked on a design
 // appliance for servers, chassis and FIs; AffectedMoId is empty on open alarms, so it is not
 // used). Other alarms are returned for the parent host. Null when the request failed: no
 // "alarms" list is set then, so the alarm LLD rules discard the value instead of losing
@@ -1671,7 +1673,7 @@ var chassisInventory = runStepOrRecordError('chassis', function () {
 var fabricInterconnectInventory = runStepOrRecordError('fabric_interconnects', function () {
     return listAllObjects(INTERSIGHT_PATHS.fabricInterconnects);
 });
-// Date without milliseconds, the format accepted by the appliance (2026-11-25T00:00:00Z).
+// Date without milliseconds, the format accepted by a design appliance (2026-11-25T00:00:00Z).
 var alarmClearedSince = new Date(new Date().getTime() - CONFIG.alarmClearedWindowSeconds * 1000)
     .toISOString().replace(/\.\d+Z$/, 'Z');
 var alarmObjects = runStepOrRecordError('alarms', function () {

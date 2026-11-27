@@ -1,10 +1,10 @@
 // Blade <-> chassis matching (chassis.blades, server.is_blade).
-// Case seen on the user's appliance: the RegisteredDevice Moid of a blade differs from
+// Case seen on a design appliance: the RegisteredDevice Moid of a blade differs from
 // the one of its chassis, so the "<RegisteredDevice.Moid>:<ChassisId>" key never matches.
 // The compute.PhysicalSummary relationship "EquipmentChassis" (Intersight API schema,
 // CiscoDevNet/intersight-python compute_physical_summary_all_of.py) must be used first.
 // is_blade: SourceObjectType first (same SDK file: "either be RackUnit or Blade"; compute.Blade
-// and compute.RackUnit seen on the user's appliance), the chassis / model rule as fallback.
+// and compute.RackUnit seen on a design appliance), the chassis / model rule as fallback.
 const crypto = require('crypto'), fs = require('fs'), path = require('path');
 const ecKey = crypto.generateKeyPairSync('ec', { namedCurve: 'prime256v1' });
 global.sha256 = text => crypto.createHash('sha256').update(text, 'utf8').digest('hex');

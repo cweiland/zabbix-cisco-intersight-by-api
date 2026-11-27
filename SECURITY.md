@@ -2,9 +2,9 @@
 
 ## Signaler une vulnérabilité
 
-**N'ouvre pas d'issue publique** pour une faille de sécurité. Utilise le signalement privé de GitHub : onglet **Security** du dépôt, puis **Report a vulnerability**. Seul le mainteneur voit le rapport.
+**N'ouvrez pas d'issue publique** pour une faille de sécurité. Utilisez le signalement privé de GitHub : onglet **Security** du dépôt, puis **Report a vulnerability**. Seul le mainteneur voit le rapport.
 
-Indique si possible :
+Indiquez si possible :
 
 - le fichier et la version concernés (commit) ;
 - comment reproduire le problème ;

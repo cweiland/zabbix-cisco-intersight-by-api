@@ -405,7 +405,7 @@ def child(tpl, cls, label, extra_items):
         'uuid': uid(T), 'template': T, 'name': T,
         'description': 'Linked by host prototypes of "' + PARENT + '". Receives data via history.push; '
                        'makes no API call itself. Class: ' + label + '.',
-        'vendor': {'name': 'Custom', 'version': '7.0-6'},
+        'vendor': {'name': 'cweiland', 'version': '7.0-6'},
         'groups': [{'name': TGROUP}],
         'items': items,
         'discovery_rules': [lld_psu, lld_port, alarm_discovery(T, 'intersight.raw', '$.alarms')],
@@ -730,7 +730,7 @@ def parent(script):
         'description': 'Cisco Intersight (SaaS or appliance). Auth: API key v3 hs2019 (default), API key v2 rsa, or OAuth2. '
                        'Creates one host per server / chassis / Fabric Interconnect and feeds them with history.push. '
                        'Requires Zabbix 7.0+.',
-        'vendor': {'name': 'Custom', 'version': '7.0-6'},
+        'vendor': {'name': 'cweiland', 'version': '7.0-6'},
         'groups': [{'name': TGROUP}],
         'items': items,
         'discovery_rules': disc,

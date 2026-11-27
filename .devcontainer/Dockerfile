@@ -3,7 +3,7 @@
 # feature), Python 3.12 (Ubuntu 24.04 default) and PyYAML 6.0.4, so that a local run and the CI
 # generate exactly the same template.
 # Base image pinned by digest (the tag is kept for readability; Docker uses the digest): a
-# re-tagged or substituted image cannot enter the build. Digest of the image the user built and
+# re-tagged or substituted image cannot enter the build. Digest of the image the maintainer built and
 # validated (docker inspect, RepoDigests). To update: pull the tag, check, replace the digest.
 FROM mcr.microsoft.com/devcontainers/base:ubuntu-24.04@sha256:d94c97dd9cacf183d0a6fd12a8e87b526e9e928307674ae9c94139139c0c6eae
 
@@ -37,9 +37,9 @@ RUN rm -f /etc/sudoers.d/vscode
 
 # Read-only git commands in the container (git status, git diff, git log): the workspace belongs
 # to the host user, not to "vscode", so git refuses it ("detected dubious ownership"). The Dev
-# Containers extension adds this entry itself at some starts, not all (user's logs of 2026-11-20
+# Containers extension adds this entry itself at some starts, not all (maintainer's logs of 2026-11-20
 # and 2026-11-24). Only this folder is trusted, not "*": its .git belongs to the host user and is
-# mounted read-only. Mount point: /workspaces/<local folder name> (seen in the user's logs).
+# mounted read-only. Mount point: /workspaces/<local folder name> (seen in the maintainer's logs).
 ARG WORKSPACE_FOLDER_NAME
 RUN test -n "$WORKSPACE_FOLDER_NAME" \
  && git config --system --add safe.directory "/workspaces/$WORKSPACE_FOLDER_NAME"

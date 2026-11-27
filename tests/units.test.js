@@ -1,5 +1,5 @@
 // Units: percentages, base units and Zabbix display units.
-// Intersight stores utilizations as 0-1 ratios (checked in the raw data of the user's
+// Intersight stores utilizations as 0-1 ratios (checked in the raw data of a design
 // appliance), although its doc gives the unit "%". {$INTERSIGHT.PERCENT.SCALE} (default 100)
 // converts them; a wrong scale must be reported, never silently stored.
 const crypto = require('crypto'), fs = require('fs'), path = require('path');
@@ -54,7 +54,7 @@ r = runCollector(0.455, 0.7, { percent_scale: '1' });
 check('percent_scale 1 on 0-1 ratios -> idle <= 1 on every FI reported as a probable ratio',
   r.errors.length === 1 && r.errors[0].includes('system.cpu.utilization_idle') && r.errors[0].includes('{$INTERSIGHT.PERCENT.SCALE}'));
 
-// Base units only (user requirement): stored values must be in W, Wh, g, s, bps..., never
+// Base units only (maintainer requirement): stored values must be in W, Wh, g, s, bps..., never
 // kWh, kg or ms, so that Grafana and external TSDBs get the raw value. Zabbix adds K/M/G
 // prefixes on display only (Zabbix 7.0 "Unit symbols", "Item value suffixes"). "!" stops those prefixes (Zabbix 7.0 "Unit symbols"): kept
 // for units where a prefix makes no sense (rpm, EUR). B (bytes, size of the pushed JSON) is
