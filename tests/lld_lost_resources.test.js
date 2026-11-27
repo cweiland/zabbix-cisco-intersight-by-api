@@ -4,6 +4,8 @@
 // (psus / ports = []) disabled every PSU and port. Both rules now set the four fields, each
 // holding one macro and nothing else ("User macros supported by location", note 1), and the
 // delete delay must be longer than the disable delay (Zabbix 7.0 "Low-level discovery").
+// A failed telemetry request no longer sends []: psus / ports are left out and the rules discard
+// the value (tests/telemetry_failure_components.test.js). These delays remain a second safeguard.
 const fs = require('fs'), path = require('path');
 const check = (label, condition) => {
   console.log((condition ? 'PASS ' : 'FAIL ') + label);

@@ -208,8 +208,10 @@ def alarm_discovery(T, master, path):
 # ------------------------------------------------------------------ PSU and port discovery
 # Lost resources of the PSU and port rules. Without enabled_lifetime_type, the Zabbix 7.0 import
 # defaults to DISABLE_IMMEDIATELY (C70XmlValidator.php): one run without telemetry (psus / ports
-# set to []) disabled every PSU and port until the next run. One macro per field, nothing else
-# ("User macros supported by location", note 1).
+# then set to []) disabled every PSU and port until the next run. Now a failed telemetry request
+# leaves psus / ports out and the rules discard the value (DISCARD_VALUE); these delays
+# remain a second safeguard, e.g. for a device that stops reporting while the request succeeds.
+# One macro per field, nothing else ("User macros supported by location", note 1).
 COMPONENT_LLD_LIFETIME = {
     'lifetime_type': 'DELETE_AFTER', 'lifetime': '{$INTERSIGHT.LLD.LOST.DELETE}',
     'enabled_lifetime_type': 'DISABLE_AFTER', 'enabled_lifetime': '{$INTERSIGHT.LLD.LOST.DISABLE}',
@@ -321,8 +323,9 @@ def child(tpl, cls, label, extra_items):
         'uuid': uid(T, 'psu.discovery'), 'name': 'PSU discovery', 'type': 'DEPENDENT',
         'key': 'intersight.psu.discovery', 'master_item': {'key': 'intersight.raw'}, **COMPONENT_LLD_LIFETIME,
         'lld_macro_paths': [{'lld_macro': '{#PSU}', 'path': '$.name'}],
-        'preprocessing': [{'type': 'JSONPATH', 'parameters': ['$.psus'],
-                           'error_handler': 'CUSTOM_VALUE', 'error_handler_params': '[]'}],
+        # psus absent: its telemetry request failed. The value is discarded, so no PSU is
+        # marked as lost (same as the host rules).
+        'preprocessing': jp('$.psus'),
         'item_prototypes': [
             dep(T, 'intersight.raw', 'PSU {#PSU}: utilization', 'intersight.psu.util[{#PSU}]',
                 "$.psus[?(@.name=='{#PSU}')].util.first()", units='%',
@@ -354,8 +357,9 @@ def child(tpl, cls, label, extra_items):
              'formulaid': 'C'}]},
         'lld_macro_paths': [{'lld_macro': '{#PORT}', 'path': '$.name'},
                             {'lld_macro': '{#PORT_ROLE}', 'path': '$.role'}],
-        'preprocessing': [{'type': 'JSONPATH', 'parameters': ['$.ports'],
-                           'error_handler': 'CUSTOM_VALUE', 'error_handler_params': '[]'}],
+        # ports absent: its telemetry request failed. The value is discarded, so no port is
+        # marked as lost (same as the host rules).
+        'preprocessing': jp('$.ports'),
         'item_prototypes': [
             dep(T, 'intersight.raw', 'Port {#PORT}: received', 'intersight.port.rx[{#PORT}]',
                 "$.ports[?(@.name=='{#PORT}')].rx_bps.first()", units='bps',
