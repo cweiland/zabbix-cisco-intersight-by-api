@@ -46,7 +46,7 @@ python3 tools/check_metrics_against_doc.py <Supported_Metrices.md>
 ```
 
 - `templates/*.yaml` is **generated**: never edit it by hand. CI fails if it is out of sync with `src/collector.js`.
-- **Zabbix limits item scripts to 65,535 characters.** The template embeds a comment-stripped copy of `src/collector.js` (`strip_comments()` in the generator; 61,760 characters with the telemetry match by `host.id` (null-prototype map), i.e. about 3,800 left: any new function must stay compact). Keep comments in the source. The generator, `tools/validate_template.py` and `tests/embedded_script.test.js` all fail if the limit is exceeded.
+- **Zabbix limits item scripts to 65,535 characters.** The template embeds a comment-stripped copy of `src/collector.js` (`strip_comments()` in the generator; 62,201 characters with the paging sorted by Moid (truncation reported) and `is_blade` from `SourceObjectType`, i.e. about 3,300 left: any new function must stay compact). Keep comments in the source. The generator, `tools/validate_template.py` and `tests/embedded_script.test.js` all fail if the limit is exceeded.
 - UUIDs are derived from names (stable across regenerations). Renaming an item key changes its UUID.
 - `src/collector.js` must stay **ES5** (Duktape). No `let`, `const`, arrow functions or template strings. CI checks this.
 - The **JSON contract** between the collector and the templates is documented at the top of `src/collector.js`. Renaming a field requires changing the matching JSONPath in `tools/generate_templates.py`.
@@ -131,6 +131,11 @@ python3 tools/check_metrics_against_doc.py <Supported_Metrices.md>
 - No row has an empty `host_id`.
 - **Uniqueness:** a groupBy on `host_id` alone and a groupBy on `host_id, host_name, host_type` return the same number of rows, for `hw.host` and for `hw.power_supply`. So each `host.id` maps to one name and one type.
 - No duplicate name in `compute/PhysicalSummaries`, `equipment/Chasses` and `network/ElementSummaries`.
+
+### Paging and server type (reported by the user, 2026-11-27)
+
+- `$orderby=Moid` is accepted together with `$top`, `$skip`, `$filter` and `$select`, on `compute/PhysicalSummaries` and `cond/Alarms`. The results come back sorted by Moid. So `listAllObjects` sorts every page by Moid (Cisco Intersight API Docs, "Query Language", "$top and $skip Query Options: Pagination": `$orderby` gives "a predictable order"; no default order stated). Moid is unique (SDK `mo_base_mo.py`: "The unique identifier of this Managed Object instance"); the SDK does not state that it never changes. A list whose last page read is full at `MAX_ITEMS_PER_LIST` is reported in `api.errors` and kept (`tests/inventory_paging.test.js`).
+- `SourceObjectType` is present on `compute/PhysicalSummaries`. Only two values were seen, `compute.RackUnit` and `compute.Blade`, with `$apply=groupby((SourceObjectType),...)` (SDK `compute_physical_summary_all_of.py`: "This feild will either be RackUnit or Blade"). `is_blade` reads it first; the chassis / model rule is only the fallback for other installations (`tests/blade_chassis_matching.test.js`).
 
 ### Alarms (reported by the user, 2026-11-26)
 

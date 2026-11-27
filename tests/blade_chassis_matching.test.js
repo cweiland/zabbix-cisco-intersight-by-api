@@ -3,6 +3,8 @@
 // the one of its chassis, so the "<RegisteredDevice.Moid>:<ChassisId>" key never matches.
 // The compute.PhysicalSummary relationship "EquipmentChassis" (Intersight API schema,
 // CiscoDevNet/intersight-python compute_physical_summary_all_of.py) must be used first.
+// is_blade: SourceObjectType first (same SDK file: "either be RackUnit or Blade"; compute.Blade
+// and compute.RackUnit seen on the user's appliance), the chassis / model rule as fallback.
 const crypto = require('crypto'), fs = require('fs'), path = require('path');
 const ecKey = crypto.generateKeyPairSync('ec', { namedCurve: 'prime256v1' });
 global.sha256 = text => crypto.createHash('sha256').update(text, 'utf8').digest('hex');
@@ -24,8 +26,12 @@ HttpRequest.prototype.verifySignature = function (method, url) {
   verified.push(crypto.verify('sha256', Buffer.from(signingString), ecKey.publicKey, signature));
 };
 const toJson = JSON.stringify;
+// When set, compute/PhysicalSummaries answers these servers (SourceObjectType scenario below).
+let sourceTypeServers = null;
 HttpRequest.prototype.get = function (url) {
   this.verifySignature('get', url);
+  if (sourceTypeServers && url.includes('PhysicalSummaries')) return toJson({ Results: sourceTypeServers });
+  // No SourceObjectType in these servers: is_blade comes from the fallback rule.
   if (url.includes('PhysicalSummaries')) return toJson({ Results: [
     // Blades of chassis c1 and c2: RegisteredDevice differs from the chassis one.
     { Moid: 'b1', Name: 'blade-1', Model: 'UCSX-210C-M7', ChassisId: '1',
@@ -86,3 +92,32 @@ check('flat_servers=0: blades (b5 included) left out of the Servers discovery, r
 check('flat_servers=0: blades still listed under their chassis',
   nestedOutput.chassis.find(chassis => chassis.moid === 'c2').blades.map(blade => blade.moid).sort().join(',') === 'b3,b5');
 check('no errors', flatOutput.api.errors.length === 0 && nestedOutput.api.errors.length === 0);
+
+// --- is_blade from SourceObjectType (compute.PhysicalSummary). The fixtures above have no
+// SourceObjectType: their checks cover the fallback rule, unchanged.
+sourceTypeServers = [
+  // Blade type, with no chassis relationship, no ChassisId and a model outside UCSB-* / UCSX-*.
+  { Moid: 's1', Name: 'typed-blade', Model: 'TEST-MODEL-WITHOUT-BLADE-PREFIX', SourceObjectType: 'compute.Blade' },
+  // Rack type with a UCSB-* model: the type comes before the model.
+  { Moid: 's2', Name: 'typed-rack', Model: 'UCSB-B200-M6', SourceObjectType: 'compute.RackUnit' },
+  // Any other value: fallback rule (UCSX-* model -> blade; rack model without chassis -> rack).
+  { Moid: 's3', Name: 'other-type-blade-model', Model: 'UCSX-210C-M7', SourceObjectType: 'fixture.OtherType' },
+  { Moid: 's4', Name: 'other-type-rack-model', Model: 'UCSC-C240-M7', ChassisId: '0', SourceObjectType: 'fixture.OtherType' }];
+const signaturesBeforeTypedRuns = verified.length;
+const typedFlatOutput = runCollector('1');
+const typedNestedOutput = runCollector('0');
+const typedServerByMoid = moid => typedFlatOutput.servers.find(server => server.moid === moid);
+
+check('typed runs: signatures verified',
+  verified.length > signaturesBeforeTypedRuns && verified.slice(signaturesBeforeTypedRuns).every(Boolean));
+check('SourceObjectType compute.Blade: is_blade=1 with a non-blade model and no chassis',
+  typedServerByMoid('s1').chassis_moid === '' && typedServerByMoid('s1').chassis_key === '' &&
+  typedServerByMoid('s1').is_blade === 1);
+check('SourceObjectType compute.RackUnit: is_blade=0 despite a UCSB-* model (type before model)',
+  typedServerByMoid('s2').is_blade === 0);
+check('other SourceObjectType value: fallback rule (UCSX-* model 1, rack model without chassis 0)',
+  typedServerByMoid('s3').is_blade === 1 && typedServerByMoid('s4').is_blade === 0);
+check('typed, flat_servers=1: every server in the Servers discovery', serverMoids(typedFlatOutput) === 's1,s2,s3,s4');
+check('typed, flat_servers=0: blades (s1, s3) left out of the Servers discovery, racks (s2, s4) kept',
+  serverMoids(typedNestedOutput) === 's2,s4');
+check('typed runs: no errors', typedFlatOutput.api.errors.length === 0 && typedNestedOutput.api.errors.length === 0);

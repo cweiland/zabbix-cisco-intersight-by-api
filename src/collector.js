@@ -909,16 +909,35 @@ function callIntersightApi(httpMethod, pathWithQuery, bodyObject) {
 // Reads every page of an Intersight list endpoint ($top / $skip paging).
 //   odataFilter   optional $filter expression
 //   odataSelect   optional comma-separated $select field list
+// Every page is sorted by Moid. Cisco Intersight API Docs, "Query Language", "$top and $skip
+// Query Options: Pagination": "You can specify $orderby to sort the results such that paginated
+// results are returned in a predictable order". The page states no default order: without
+// $orderby, an object could be skipped or read twice if the order changed between two pages.
+// Moid gives a total order because it is unique per object (CiscoDevNet/intersight-python,
+// mo_base_mo.py: "The unique identifier of this Managed Object instance"). A field such as
+// CreationTime, the doc's example, can have ties. Checked on the user's appliance, on
+// compute/PhysicalSummaries and cond/Alarms: $orderby=Moid is accepted together with $top,
+// $skip, $filter and $select, and the results come back sorted by Moid.
+// At most MAX_ITEMS_PER_LIST objects are read. If the last page read is full, the list is
+// reported as truncated in "API: last errors" and the objects read are kept, so that they stay
+// monitored. Objects beyond the limit are not discovered: hosts that already existed become
+// lost resources, and alarms beyond the limit are not reflected. A list of exactly
+// MAX_ITEMS_PER_LIST objects is reported too: without one more request, it cannot be told
+// apart from a longer list (accepted limit).
 function listAllObjects(path, odataFilter, odataSelect) {
     var allObjects = [], skip = 0, page, queryString;
     do {
-        queryString = '?$top=' + PAGE_SIZE + '&$skip=' + skip +
+        queryString = '?$top=' + PAGE_SIZE + '&$skip=' + skip + '&$orderby=Moid' +
             (odataFilter ? '&$filter=' + encodeURIComponent(odataFilter) : '') +
             (odataSelect ? '&$select=' + encodeURIComponent(odataSelect) : '');
         page = callIntersightApi('GET', path + queryString);
         allObjects = allObjects.concat(page.Results || []);
         skip += PAGE_SIZE;
     } while (page.Results && page.Results.length === PAGE_SIZE && skip < MAX_ITEMS_PER_LIST);
+    // The loop above only ends on a full page when skip reached MAX_ITEMS_PER_LIST.
+    if (page.Results && page.Results.length === PAGE_SIZE) {
+        collectedErrors.push(path + ': list truncated at ' + MAX_ITEMS_PER_LIST + ' objects');
+    }
     return allObjects;
 }
 
@@ -1405,9 +1424,24 @@ function buildServerDevice(inventoryObject, telemetryByDeviceMoid) {
     }
     device.chassis_moid = getEquipmentChassisMoid(inventoryObject);
     device.chassis_key = buildChassisKey(inventoryObject);
-    // Blade = inside a chassis, or a blade model (UCSB-* / UCSX-*).
-    device.is_blade = (device.chassis_moid !== '' || device.chassis_key !== '' ||
-        /^UCS[BX]/.test(device.model)) ? 1 : 0;
+    // Blade (1) or rack server (0), used by the Zabbix 7.4 nested mode (flat_servers=0).
+    // SourceObjectType comes first: "Stores the source object type. This feild will either be
+    // RackUnit or Blade." (CiscoDevNet/intersight-python, compute_physical_summary_all_of.py);
+    // only compute.Blade and compute.RackUnit were seen on the user's appliance. The server
+    // list is read without $select, so the field comes with the others.
+    // Absent or other value (another installation may not return it), fallback rule:
+    // blade = inside a chassis, or a blade model (UCSB-* / UCSX-*).
+    var sourceObjectType = inventoryObject.SourceObjectType;
+    if (sourceObjectType === 'compute.Blade') {
+        device.is_blade = 1;
+    }
+    else if (sourceObjectType === 'compute.RackUnit') {
+        device.is_blade = 0;
+    }
+    else {
+        device.is_blade = (device.chassis_moid !== '' || device.chassis_key !== '' ||
+            /^UCS[BX]/.test(device.model)) ? 1 : 0;
+    }
     return device;
 }
 
