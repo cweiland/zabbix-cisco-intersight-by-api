@@ -769,6 +769,131 @@ zabbix_export:
         priority: AVERAGE
         description: 'Fires only for links that were up during the last 24h, so unused ports stay silent. hw.network.up minimum over the window: a link down at least once reads as down.'
         manual_close: 'YES'
+    - uuid: 834ceaf337794357a16d89f408d75bec
+      name: Intersight alarms
+      type: DEPENDENT
+      key: intersight.alarm.discovery
+      master_item:
+        key: intersight.raw
+      lifetime_type: DELETE_AFTER
+      lifetime: '{$INTERSIGHT.ALARM.LOST.DELETE}'
+      enabled_lifetime_type: DISABLE_AFTER
+      enabled_lifetime: '{$INTERSIGHT.ALARM.LOST.DISABLE}'
+      lld_macro_paths:
+      - lld_macro: '{#ALARM.ID}'
+        path: $.id
+      - lld_macro: '{#ALARM.NAME}'
+        path: $.name
+      - lld_macro: '{#ALARM.CODE}'
+        path: $.code
+      - lld_macro: '{#ALARM.TARGET}'
+        path: $.target
+      preprocessing:
+      - type: JSONPATH
+        parameters:
+        - $.alarms
+        error_handler: DISCARD_VALUE
+      item_prototypes:
+      - uuid: 6dc0d58419ef4385b69f017060eed4eb
+        name: 'Alarm {#ALARM.NAME} on {#ALARM.TARGET}: severity'
+        type: DEPENDENT
+        key: intersight.alarm.severity[{#ALARM.ID}]
+        value_type: UNSIGNED
+        master_item:
+          key: intersight.raw
+        valuemap:
+          name: Intersight alarm severity
+        preprocessing:
+        - type: JSONPATH
+          parameters:
+          - $.alarms[?(@.id=='{#ALARM.ID}')].severity.first()
+          error_handler: DISCARD_VALUE
+        - type: DISCARD_UNCHANGED_HEARTBEAT
+          parameters:
+          - 1h
+        tags:
+        - tag: component
+          value: alarm
+        - tag: alarm-code
+          value: '{#ALARM.CODE}'
+      - uuid: b6ba1bb2bb49468685633fb0e6d12397
+        name: 'Alarm {#ALARM.NAME} on {#ALARM.TARGET}: acknowledged'
+        type: DEPENDENT
+        key: intersight.alarm.ack[{#ALARM.ID}]
+        value_type: UNSIGNED
+        master_item:
+          key: intersight.raw
+        valuemap:
+          name: Intersight alarm acknowledged
+        preprocessing:
+        - type: JSONPATH
+          parameters:
+          - $.alarms[?(@.id=='{#ALARM.ID}')].ack.first()
+          error_handler: DISCARD_VALUE
+        - type: DISCARD_UNCHANGED_HEARTBEAT
+          parameters:
+          - 1h
+        tags:
+        - tag: component
+          value: alarm
+        - tag: alarm-code
+          value: '{#ALARM.CODE}'
+      - uuid: 65271ab044064a19a4b60d3362f2cb5f
+        name: 'Alarm {#ALARM.NAME} on {#ALARM.TARGET}: suppressed'
+        type: DEPENDENT
+        key: intersight.alarm.suppressed[{#ALARM.ID}]
+        value_type: UNSIGNED
+        master_item:
+          key: intersight.raw
+        valuemap:
+          name: Intersight alarm suppressed
+        preprocessing:
+        - type: JSONPATH
+          parameters:
+          - $.alarms[?(@.id=='{#ALARM.ID}')].suppressed.first()
+          error_handler: DISCARD_VALUE
+        - type: DISCARD_UNCHANGED_HEARTBEAT
+          parameters:
+          - 1h
+        tags:
+        - tag: component
+          value: alarm
+        - tag: alarm-code
+          value: '{#ALARM.CODE}'
+      trigger_prototypes:
+      - uuid: 0b3bce055265455e8d780ba942ceac21
+        expression: last(/Cisco Intersight Server by push/intersight.alarm.severity[{#ALARM.ID}])=3 and last(/Cisco Intersight Server by push/intersight.alarm.ack[{#ALARM.ID}])>=0 and last(/Cisco Intersight Server by push/intersight.alarm.suppressed[{#ALARM.ID}])>=0 and nodata(/Cisco Intersight Server by push/intersight.alarm.severity[{#ALARM.ID}],{$INTERSIGHT.ALARM.NODATA})=0
+        name: 'Intersight alarm: {#ALARM.NAME} on {#ALARM.TARGET}'
+        priority: HIGH
+        opdata: 'Acknowledged in Intersight: {ITEM.LASTVALUE2}, suppressed: {ITEM.LASTVALUE3}'
+        description: Mirror of Intersight alarm {#ALARM.ID} (code {#ALARM.CODE}). Acknowledging or suppressing it in Intersight keeps the problem open; only Cleared closes it. Nothing done here is sent to Intersight.
+        tags:
+        - tag: component
+          value: alarm
+        - tag: alarm-code
+          value: '{#ALARM.CODE}'
+      - uuid: 23081ae8634041ad93c971d3f4d48dcd
+        expression: last(/Cisco Intersight Server by push/intersight.alarm.severity[{#ALARM.ID}])=2 and last(/Cisco Intersight Server by push/intersight.alarm.ack[{#ALARM.ID}])>=0 and last(/Cisco Intersight Server by push/intersight.alarm.suppressed[{#ALARM.ID}])>=0 and nodata(/Cisco Intersight Server by push/intersight.alarm.severity[{#ALARM.ID}],{$INTERSIGHT.ALARM.NODATA})=0
+        name: 'Intersight alarm: {#ALARM.NAME} on {#ALARM.TARGET}'
+        priority: WARNING
+        opdata: 'Acknowledged in Intersight: {ITEM.LASTVALUE2}, suppressed: {ITEM.LASTVALUE3}'
+        description: Mirror of Intersight alarm {#ALARM.ID} (code {#ALARM.CODE}). Acknowledging or suppressing it in Intersight keeps the problem open; only Cleared closes it. Nothing done here is sent to Intersight.
+        tags:
+        - tag: component
+          value: alarm
+        - tag: alarm-code
+          value: '{#ALARM.CODE}'
+      - uuid: 778dfc04e73547dd9abf1ab363349a3d
+        expression: last(/Cisco Intersight Server by push/intersight.alarm.severity[{#ALARM.ID}])=1 and last(/Cisco Intersight Server by push/intersight.alarm.ack[{#ALARM.ID}])>=0 and last(/Cisco Intersight Server by push/intersight.alarm.suppressed[{#ALARM.ID}])>=0 and nodata(/Cisco Intersight Server by push/intersight.alarm.severity[{#ALARM.ID}],{$INTERSIGHT.ALARM.NODATA})=0
+        name: 'Intersight alarm: {#ALARM.NAME} on {#ALARM.TARGET}'
+        priority: INFO
+        opdata: 'Acknowledged in Intersight: {ITEM.LASTVALUE2}, suppressed: {ITEM.LASTVALUE3}'
+        description: Mirror of Intersight alarm {#ALARM.ID} (code {#ALARM.CODE}). Acknowledging or suppressing it in Intersight keeps the problem open; only Cleared closes it. Nothing done here is sent to Intersight.
+        tags:
+        - tag: component
+          value: alarm
+        - tag: alarm-code
+          value: '{#ALARM.CODE}'
     tags:
     - tag: class
       value: hardware
@@ -808,6 +933,15 @@ zabbix_export:
     - macro: '{$INTERSIGHT.PORT.ROLE.NOT_MATCHES}'
       value: ^(unconfigured|vethernet|vfc|vnic|vhba)$
       description: 'Regex of port roles (hw.network.port.role) to ignore. Default: unconfigured and virtual interfaces, as excluded by the intersight-grafana dashboards.'
+    - macro: '{$INTERSIGHT.ALARM.NODATA}'
+      value: 2h
+      description: An alarm item without value for this long closes its problem (alarm gone from Intersight without Cleared, or collector down). Must stay above the 1h heartbeat of the alarm items.
+    - macro: '{$INTERSIGHT.ALARM.LOST.DISABLE}'
+      value: 1d
+      description: 'Alarms no longer reported by Intersight: items disabled after this long. Must be shorter than {$INTERSIGHT.ALARM.LOST.DELETE} (Zabbix 7.0 "Low-level discovery").'
+    - macro: '{$INTERSIGHT.ALARM.LOST.DELETE}'
+      value: 7d
+      description: 'Alarms no longer reported by Intersight: items deleted after this long. Must be longer than {$INTERSIGHT.ALARM.LOST.DISABLE}.'
     valuemaps:
     - uuid: 1b3b9acb37b44c5c96c7cb10f88550b1
       name: Power state
@@ -823,6 +957,31 @@ zabbix_export:
         newvalue: Down
       - value: '1'
         newvalue: Up
+    - uuid: c6f0cee8a5d14d62940a66623e395d24
+      name: Intersight alarm severity
+      mappings:
+      - value: '0'
+        newvalue: Cleared
+      - value: '1'
+        newvalue: Info
+      - value: '2'
+        newvalue: Warning
+      - value: '3'
+        newvalue: Critical
+    - uuid: 8fe6db0c9fc94a5fb3311c614ca18447
+      name: Intersight alarm acknowledged
+      mappings:
+      - value: '0'
+        newvalue: 'No'
+      - value: '1'
+        newvalue: 'Yes'
+    - uuid: 1d4792c0a7a74bf4aa5e5225162d4265
+      name: Intersight alarm suppressed
+      mappings:
+      - value: '0'
+        newvalue: 'No'
+      - value: '1'
+        newvalue: 'Yes'
   - uuid: 0263297f16cb4b8780ddfa3da854ed69
     template: Cisco Intersight Chassis by push
     name: Cisco Intersight Chassis by push
@@ -1367,6 +1526,131 @@ zabbix_export:
         priority: AVERAGE
         description: 'Fires only for links that were up during the last 24h, so unused ports stay silent. hw.network.up minimum over the window: a link down at least once reads as down.'
         manual_close: 'YES'
+    - uuid: af4a44ec4a4941c692f502098c058691
+      name: Intersight alarms
+      type: DEPENDENT
+      key: intersight.alarm.discovery
+      master_item:
+        key: intersight.raw
+      lifetime_type: DELETE_AFTER
+      lifetime: '{$INTERSIGHT.ALARM.LOST.DELETE}'
+      enabled_lifetime_type: DISABLE_AFTER
+      enabled_lifetime: '{$INTERSIGHT.ALARM.LOST.DISABLE}'
+      lld_macro_paths:
+      - lld_macro: '{#ALARM.ID}'
+        path: $.id
+      - lld_macro: '{#ALARM.NAME}'
+        path: $.name
+      - lld_macro: '{#ALARM.CODE}'
+        path: $.code
+      - lld_macro: '{#ALARM.TARGET}'
+        path: $.target
+      preprocessing:
+      - type: JSONPATH
+        parameters:
+        - $.alarms
+        error_handler: DISCARD_VALUE
+      item_prototypes:
+      - uuid: 39e7155f293e48a78bb523381c56058d
+        name: 'Alarm {#ALARM.NAME} on {#ALARM.TARGET}: severity'
+        type: DEPENDENT
+        key: intersight.alarm.severity[{#ALARM.ID}]
+        value_type: UNSIGNED
+        master_item:
+          key: intersight.raw
+        valuemap:
+          name: Intersight alarm severity
+        preprocessing:
+        - type: JSONPATH
+          parameters:
+          - $.alarms[?(@.id=='{#ALARM.ID}')].severity.first()
+          error_handler: DISCARD_VALUE
+        - type: DISCARD_UNCHANGED_HEARTBEAT
+          parameters:
+          - 1h
+        tags:
+        - tag: component
+          value: alarm
+        - tag: alarm-code
+          value: '{#ALARM.CODE}'
+      - uuid: bbd1b8d963754d0a82f54ce94fe09043
+        name: 'Alarm {#ALARM.NAME} on {#ALARM.TARGET}: acknowledged'
+        type: DEPENDENT
+        key: intersight.alarm.ack[{#ALARM.ID}]
+        value_type: UNSIGNED
+        master_item:
+          key: intersight.raw
+        valuemap:
+          name: Intersight alarm acknowledged
+        preprocessing:
+        - type: JSONPATH
+          parameters:
+          - $.alarms[?(@.id=='{#ALARM.ID}')].ack.first()
+          error_handler: DISCARD_VALUE
+        - type: DISCARD_UNCHANGED_HEARTBEAT
+          parameters:
+          - 1h
+        tags:
+        - tag: component
+          value: alarm
+        - tag: alarm-code
+          value: '{#ALARM.CODE}'
+      - uuid: 3ad02bcebcd44e26b996e26dbbf57e15
+        name: 'Alarm {#ALARM.NAME} on {#ALARM.TARGET}: suppressed'
+        type: DEPENDENT
+        key: intersight.alarm.suppressed[{#ALARM.ID}]
+        value_type: UNSIGNED
+        master_item:
+          key: intersight.raw
+        valuemap:
+          name: Intersight alarm suppressed
+        preprocessing:
+        - type: JSONPATH
+          parameters:
+          - $.alarms[?(@.id=='{#ALARM.ID}')].suppressed.first()
+          error_handler: DISCARD_VALUE
+        - type: DISCARD_UNCHANGED_HEARTBEAT
+          parameters:
+          - 1h
+        tags:
+        - tag: component
+          value: alarm
+        - tag: alarm-code
+          value: '{#ALARM.CODE}'
+      trigger_prototypes:
+      - uuid: d6abcdb05d784871aeda0bbfffe09138
+        expression: last(/Cisco Intersight Chassis by push/intersight.alarm.severity[{#ALARM.ID}])=3 and last(/Cisco Intersight Chassis by push/intersight.alarm.ack[{#ALARM.ID}])>=0 and last(/Cisco Intersight Chassis by push/intersight.alarm.suppressed[{#ALARM.ID}])>=0 and nodata(/Cisco Intersight Chassis by push/intersight.alarm.severity[{#ALARM.ID}],{$INTERSIGHT.ALARM.NODATA})=0
+        name: 'Intersight alarm: {#ALARM.NAME} on {#ALARM.TARGET}'
+        priority: HIGH
+        opdata: 'Acknowledged in Intersight: {ITEM.LASTVALUE2}, suppressed: {ITEM.LASTVALUE3}'
+        description: Mirror of Intersight alarm {#ALARM.ID} (code {#ALARM.CODE}). Acknowledging or suppressing it in Intersight keeps the problem open; only Cleared closes it. Nothing done here is sent to Intersight.
+        tags:
+        - tag: component
+          value: alarm
+        - tag: alarm-code
+          value: '{#ALARM.CODE}'
+      - uuid: a5bdc495d87647d7a4f065d141809c69
+        expression: last(/Cisco Intersight Chassis by push/intersight.alarm.severity[{#ALARM.ID}])=2 and last(/Cisco Intersight Chassis by push/intersight.alarm.ack[{#ALARM.ID}])>=0 and last(/Cisco Intersight Chassis by push/intersight.alarm.suppressed[{#ALARM.ID}])>=0 and nodata(/Cisco Intersight Chassis by push/intersight.alarm.severity[{#ALARM.ID}],{$INTERSIGHT.ALARM.NODATA})=0
+        name: 'Intersight alarm: {#ALARM.NAME} on {#ALARM.TARGET}'
+        priority: WARNING
+        opdata: 'Acknowledged in Intersight: {ITEM.LASTVALUE2}, suppressed: {ITEM.LASTVALUE3}'
+        description: Mirror of Intersight alarm {#ALARM.ID} (code {#ALARM.CODE}). Acknowledging or suppressing it in Intersight keeps the problem open; only Cleared closes it. Nothing done here is sent to Intersight.
+        tags:
+        - tag: component
+          value: alarm
+        - tag: alarm-code
+          value: '{#ALARM.CODE}'
+      - uuid: 87dd954342a74bd39f1975a8734ad75f
+        expression: last(/Cisco Intersight Chassis by push/intersight.alarm.severity[{#ALARM.ID}])=1 and last(/Cisco Intersight Chassis by push/intersight.alarm.ack[{#ALARM.ID}])>=0 and last(/Cisco Intersight Chassis by push/intersight.alarm.suppressed[{#ALARM.ID}])>=0 and nodata(/Cisco Intersight Chassis by push/intersight.alarm.severity[{#ALARM.ID}],{$INTERSIGHT.ALARM.NODATA})=0
+        name: 'Intersight alarm: {#ALARM.NAME} on {#ALARM.TARGET}'
+        priority: INFO
+        opdata: 'Acknowledged in Intersight: {ITEM.LASTVALUE2}, suppressed: {ITEM.LASTVALUE3}'
+        description: Mirror of Intersight alarm {#ALARM.ID} (code {#ALARM.CODE}). Acknowledging or suppressing it in Intersight keeps the problem open; only Cleared closes it. Nothing done here is sent to Intersight.
+        tags:
+        - tag: component
+          value: alarm
+        - tag: alarm-code
+          value: '{#ALARM.CODE}'
     tags:
     - tag: class
       value: hardware
@@ -1406,6 +1690,15 @@ zabbix_export:
     - macro: '{$INTERSIGHT.PORT.ROLE.NOT_MATCHES}'
       value: ^(unconfigured|vethernet|vfc|vnic|vhba)$
       description: 'Regex of port roles (hw.network.port.role) to ignore. Default: unconfigured and virtual interfaces, as excluded by the intersight-grafana dashboards.'
+    - macro: '{$INTERSIGHT.ALARM.NODATA}'
+      value: 2h
+      description: An alarm item without value for this long closes its problem (alarm gone from Intersight without Cleared, or collector down). Must stay above the 1h heartbeat of the alarm items.
+    - macro: '{$INTERSIGHT.ALARM.LOST.DISABLE}'
+      value: 1d
+      description: 'Alarms no longer reported by Intersight: items disabled after this long. Must be shorter than {$INTERSIGHT.ALARM.LOST.DELETE} (Zabbix 7.0 "Low-level discovery").'
+    - macro: '{$INTERSIGHT.ALARM.LOST.DELETE}'
+      value: 7d
+      description: 'Alarms no longer reported by Intersight: items deleted after this long. Must be longer than {$INTERSIGHT.ALARM.LOST.DISABLE}.'
     valuemaps:
     - uuid: 8e519c895f2b4f2484e9cecf27227d6a
       name: Power state
@@ -1421,6 +1714,31 @@ zabbix_export:
         newvalue: Down
       - value: '1'
         newvalue: Up
+    - uuid: a30e08f0067c49db8fb6a8c46712b157
+      name: Intersight alarm severity
+      mappings:
+      - value: '0'
+        newvalue: Cleared
+      - value: '1'
+        newvalue: Info
+      - value: '2'
+        newvalue: Warning
+      - value: '3'
+        newvalue: Critical
+    - uuid: 40b21d3e3ccd4516beaf13d67947891f
+      name: Intersight alarm acknowledged
+      mappings:
+      - value: '0'
+        newvalue: 'No'
+      - value: '1'
+        newvalue: 'Yes'
+    - uuid: 9592e43bb49f400db0bb3f2b9c212455
+      name: Intersight alarm suppressed
+      mappings:
+      - value: '0'
+        newvalue: 'No'
+      - value: '1'
+        newvalue: 'Yes'
   - uuid: ec0d6f3362774e3794bf9f5294250aac
     template: Cisco Intersight FI by push
     name: Cisco Intersight FI by push
@@ -2041,6 +2359,131 @@ zabbix_export:
         priority: AVERAGE
         description: 'Fires only for links that were up during the last 24h, so unused ports stay silent. hw.network.up minimum over the window: a link down at least once reads as down.'
         manual_close: 'YES'
+    - uuid: 4a808a370f7642b887a6ac5efc776bea
+      name: Intersight alarms
+      type: DEPENDENT
+      key: intersight.alarm.discovery
+      master_item:
+        key: intersight.raw
+      lifetime_type: DELETE_AFTER
+      lifetime: '{$INTERSIGHT.ALARM.LOST.DELETE}'
+      enabled_lifetime_type: DISABLE_AFTER
+      enabled_lifetime: '{$INTERSIGHT.ALARM.LOST.DISABLE}'
+      lld_macro_paths:
+      - lld_macro: '{#ALARM.ID}'
+        path: $.id
+      - lld_macro: '{#ALARM.NAME}'
+        path: $.name
+      - lld_macro: '{#ALARM.CODE}'
+        path: $.code
+      - lld_macro: '{#ALARM.TARGET}'
+        path: $.target
+      preprocessing:
+      - type: JSONPATH
+        parameters:
+        - $.alarms
+        error_handler: DISCARD_VALUE
+      item_prototypes:
+      - uuid: 25dc15d10ea44ad5bfdb12da7538c68c
+        name: 'Alarm {#ALARM.NAME} on {#ALARM.TARGET}: severity'
+        type: DEPENDENT
+        key: intersight.alarm.severity[{#ALARM.ID}]
+        value_type: UNSIGNED
+        master_item:
+          key: intersight.raw
+        valuemap:
+          name: Intersight alarm severity
+        preprocessing:
+        - type: JSONPATH
+          parameters:
+          - $.alarms[?(@.id=='{#ALARM.ID}')].severity.first()
+          error_handler: DISCARD_VALUE
+        - type: DISCARD_UNCHANGED_HEARTBEAT
+          parameters:
+          - 1h
+        tags:
+        - tag: component
+          value: alarm
+        - tag: alarm-code
+          value: '{#ALARM.CODE}'
+      - uuid: f03d517103c44d3f80ebb29be088c168
+        name: 'Alarm {#ALARM.NAME} on {#ALARM.TARGET}: acknowledged'
+        type: DEPENDENT
+        key: intersight.alarm.ack[{#ALARM.ID}]
+        value_type: UNSIGNED
+        master_item:
+          key: intersight.raw
+        valuemap:
+          name: Intersight alarm acknowledged
+        preprocessing:
+        - type: JSONPATH
+          parameters:
+          - $.alarms[?(@.id=='{#ALARM.ID}')].ack.first()
+          error_handler: DISCARD_VALUE
+        - type: DISCARD_UNCHANGED_HEARTBEAT
+          parameters:
+          - 1h
+        tags:
+        - tag: component
+          value: alarm
+        - tag: alarm-code
+          value: '{#ALARM.CODE}'
+      - uuid: dd5ab2475437482f84489625f06ce0f1
+        name: 'Alarm {#ALARM.NAME} on {#ALARM.TARGET}: suppressed'
+        type: DEPENDENT
+        key: intersight.alarm.suppressed[{#ALARM.ID}]
+        value_type: UNSIGNED
+        master_item:
+          key: intersight.raw
+        valuemap:
+          name: Intersight alarm suppressed
+        preprocessing:
+        - type: JSONPATH
+          parameters:
+          - $.alarms[?(@.id=='{#ALARM.ID}')].suppressed.first()
+          error_handler: DISCARD_VALUE
+        - type: DISCARD_UNCHANGED_HEARTBEAT
+          parameters:
+          - 1h
+        tags:
+        - tag: component
+          value: alarm
+        - tag: alarm-code
+          value: '{#ALARM.CODE}'
+      trigger_prototypes:
+      - uuid: cff248215e1e4bf1b782ae62789448d4
+        expression: last(/Cisco Intersight FI by push/intersight.alarm.severity[{#ALARM.ID}])=3 and last(/Cisco Intersight FI by push/intersight.alarm.ack[{#ALARM.ID}])>=0 and last(/Cisco Intersight FI by push/intersight.alarm.suppressed[{#ALARM.ID}])>=0 and nodata(/Cisco Intersight FI by push/intersight.alarm.severity[{#ALARM.ID}],{$INTERSIGHT.ALARM.NODATA})=0
+        name: 'Intersight alarm: {#ALARM.NAME} on {#ALARM.TARGET}'
+        priority: HIGH
+        opdata: 'Acknowledged in Intersight: {ITEM.LASTVALUE2}, suppressed: {ITEM.LASTVALUE3}'
+        description: Mirror of Intersight alarm {#ALARM.ID} (code {#ALARM.CODE}). Acknowledging or suppressing it in Intersight keeps the problem open; only Cleared closes it. Nothing done here is sent to Intersight.
+        tags:
+        - tag: component
+          value: alarm
+        - tag: alarm-code
+          value: '{#ALARM.CODE}'
+      - uuid: 2eb91b56a0c341bda987ae361035b470
+        expression: last(/Cisco Intersight FI by push/intersight.alarm.severity[{#ALARM.ID}])=2 and last(/Cisco Intersight FI by push/intersight.alarm.ack[{#ALARM.ID}])>=0 and last(/Cisco Intersight FI by push/intersight.alarm.suppressed[{#ALARM.ID}])>=0 and nodata(/Cisco Intersight FI by push/intersight.alarm.severity[{#ALARM.ID}],{$INTERSIGHT.ALARM.NODATA})=0
+        name: 'Intersight alarm: {#ALARM.NAME} on {#ALARM.TARGET}'
+        priority: WARNING
+        opdata: 'Acknowledged in Intersight: {ITEM.LASTVALUE2}, suppressed: {ITEM.LASTVALUE3}'
+        description: Mirror of Intersight alarm {#ALARM.ID} (code {#ALARM.CODE}). Acknowledging or suppressing it in Intersight keeps the problem open; only Cleared closes it. Nothing done here is sent to Intersight.
+        tags:
+        - tag: component
+          value: alarm
+        - tag: alarm-code
+          value: '{#ALARM.CODE}'
+      - uuid: 5dc70c1738fe4b11835f60e39c257a91
+        expression: last(/Cisco Intersight FI by push/intersight.alarm.severity[{#ALARM.ID}])=1 and last(/Cisco Intersight FI by push/intersight.alarm.ack[{#ALARM.ID}])>=0 and last(/Cisco Intersight FI by push/intersight.alarm.suppressed[{#ALARM.ID}])>=0 and nodata(/Cisco Intersight FI by push/intersight.alarm.severity[{#ALARM.ID}],{$INTERSIGHT.ALARM.NODATA})=0
+        name: 'Intersight alarm: {#ALARM.NAME} on {#ALARM.TARGET}'
+        priority: INFO
+        opdata: 'Acknowledged in Intersight: {ITEM.LASTVALUE2}, suppressed: {ITEM.LASTVALUE3}'
+        description: Mirror of Intersight alarm {#ALARM.ID} (code {#ALARM.CODE}). Acknowledging or suppressing it in Intersight keeps the problem open; only Cleared closes it. Nothing done here is sent to Intersight.
+        tags:
+        - tag: component
+          value: alarm
+        - tag: alarm-code
+          value: '{#ALARM.CODE}'
     tags:
     - tag: class
       value: hardware
@@ -2080,6 +2523,15 @@ zabbix_export:
     - macro: '{$INTERSIGHT.PORT.ROLE.NOT_MATCHES}'
       value: ^(unconfigured|vethernet|vfc|vnic|vhba)$
       description: 'Regex of port roles (hw.network.port.role) to ignore. Default: unconfigured and virtual interfaces, as excluded by the intersight-grafana dashboards.'
+    - macro: '{$INTERSIGHT.ALARM.NODATA}'
+      value: 2h
+      description: An alarm item without value for this long closes its problem (alarm gone from Intersight without Cleared, or collector down). Must stay above the 1h heartbeat of the alarm items.
+    - macro: '{$INTERSIGHT.ALARM.LOST.DISABLE}'
+      value: 1d
+      description: 'Alarms no longer reported by Intersight: items disabled after this long. Must be shorter than {$INTERSIGHT.ALARM.LOST.DELETE} (Zabbix 7.0 "Low-level discovery").'
+    - macro: '{$INTERSIGHT.ALARM.LOST.DELETE}'
+      value: 7d
+      description: 'Alarms no longer reported by Intersight: items deleted after this long. Must be longer than {$INTERSIGHT.ALARM.LOST.DISABLE}.'
     valuemaps:
     - uuid: 8f1d1990301449e391fb98910e95daca
       name: Power state
@@ -2095,6 +2547,31 @@ zabbix_export:
         newvalue: Down
       - value: '1'
         newvalue: Up
+    - uuid: 789bfb3560134734a700eb0c47c59068
+      name: Intersight alarm severity
+      mappings:
+      - value: '0'
+        newvalue: Cleared
+      - value: '1'
+        newvalue: Info
+      - value: '2'
+        newvalue: Warning
+      - value: '3'
+        newvalue: Critical
+    - uuid: 222c11eaf81c442daa82ff4d64d790a2
+      name: Intersight alarm acknowledged
+      mappings:
+      - value: '0'
+        newvalue: 'No'
+      - value: '1'
+        newvalue: 'Yes'
+    - uuid: 41eb400ed5164003ab472d761ef1cbe2
+      name: Intersight alarm suppressed
+      mappings:
+      - value: '0'
+        newvalue: 'No'
+      - value: '1'
+        newvalue: 'Yes'
   - uuid: 04927e64081d4df6a386bc1390e7d65c
     template: Cisco Intersight by API
     name: Cisco Intersight by API
@@ -2128,6 +2605,7 @@ zabbix_export:
             druidComponentDimension: itemParameters.component_dim || 'name',
             discoverBladesAsServers: String(itemParameters.flat_servers) !== '0',
             percentScale: parseFloat(itemParameters.percent_scale || '100'),
+            alarmClearedWindowSeconds: parseDurationSeconds(itemParameters.alarm_cleared_window, 86400),
             pushEnabled: !!(itemParameters.zbx_url && itemParameters.zbx_token &&
                 itemParameters.zbx_url.indexOf('{$') !== 0)
         };
@@ -2141,7 +2619,12 @@ zabbix_export:
             oauthToken: '/iam/token'
         };
 
-        var OPEN_ALARMS_FILTER = "Acknowledge eq 'None' and Severity ne 'Cleared'";
+        function buildAlarmFilter(since) {
+            return "Severity ne 'Cleared' or (Severity eq 'Cleared' and LastTransitionTime gt " + since + ")";
+        }
+        var ALARM_SELECT = 'Moid,Name,Code,Severity,Description,Acknowledge,Suppressed,AncestorMoId,' +
+            'AncestorMoType,LastTransitionTime,CreationTime,AffectedMoDisplayName';
+        var ALARM_SEVERITY_CODES = { Cleared: 0, Info: 1, Warning: 2, Critical: 3 };
 
         var PAGE_SIZE = 1000;
         var MAX_ITEMS_PER_LIST = 20000;
@@ -2228,6 +2711,11 @@ zabbix_export:
             if (first === null || first === undefined) { return second; }
             if (second === null || second === undefined) { return first; }
             return Math.min(first, second);
+        }
+
+        function parseDurationSeconds(text, fallbackSeconds) {
+            var match = /^(\d+)([smhdw]?)$/.exec(String(text));
+            return match ? parseInt(match[1], 10) * { '': 1, s: 1, m: 60, h: 3600, d: 86400, w: 604800 }[match[2]] : fallbackSeconds;
         }
 
         function roundToOneDecimal(number) {
@@ -3199,6 +3687,7 @@ zabbix_export:
         function countAlarmsBySeverity(alarmObjects) {
             var counts = { critical: 0, warning: 0, info: 0 }, index;
             for (index = 0; alarmObjects && index < alarmObjects.length; index++) {
+                if (alarmObjects[index].Acknowledge === 'Acknowledge' || alarmObjects[index].Severity === 'Cleared') { continue; }
                 switch (String(alarmObjects[index].Severity)) {
                     case 'Critical': counts.critical++; break;
                     case 'Warning': counts.warning++; break;
@@ -3206,6 +3695,35 @@ zabbix_export:
                 }
             }
             return counts;
+        }
+
+        function attachAlarmsToDevices(alarmObjects, devices) {
+            var deviceByMoid = {}, platformAlarms = [], index, alarm, severity, entry, device;
+            if (alarmObjects === null) { return null; }
+            for (index = 0; index < devices.length; index++) {
+                devices[index].alarms = [];
+                deviceByMoid[devices[index].moid] = devices[index];
+            }
+            for (index = 0; index < alarmObjects.length; index++) {
+                alarm = alarmObjects[index];
+                severity = ALARM_SEVERITY_CODES.hasOwnProperty(alarm.Severity) ? ALARM_SEVERITY_CODES[alarm.Severity] : null;
+                if (severity === null) { continue; }
+                entry = {
+                    id: alarm.Moid, name: alarm.Name || '', code: alarm.Code || '', severity: severity,
+                    ack: alarm.Acknowledge === 'Acknowledge' ? 1 : 0, suppressed: alarm.Suppressed ? 1 : 0,
+                    target: alarm.AffectedMoDisplayName || '', description: alarm.Description || '',
+                    last_transition: alarm.LastTransitionTime || ''
+                };
+                device = (alarm.AncestorMoId && deviceByMoid.hasOwnProperty(alarm.AncestorMoId)) ? deviceByMoid[alarm.AncestorMoId] : null;
+                if (device) {
+                    device.alarms.push(entry);
+                }
+                else {
+                    entry.ancestor_type = alarm.AncestorMoType || '';
+                    platformAlarms.push(entry);
+                }
+            }
+            return platformAlarms;
         }
 
         function pushDevicesToZabbix(allDevices, collectionTime) {
@@ -3256,8 +3774,10 @@ zabbix_export:
         var fabricInterconnectInventory = runStepOrRecordError('fabric_interconnects', function () {
             return listAllObjects(INTERSIGHT_PATHS.fabricInterconnects);
         });
-        var openAlarms = runStepOrRecordError('alarms', function () {
-            return listAllObjects(INTERSIGHT_PATHS.alarms, OPEN_ALARMS_FILTER, 'Severity');
+        var alarmClearedSince = new Date(new Date().getTime() - CONFIG.alarmClearedWindowSeconds * 1000)
+            .toISOString().replace(/\.\d+Z$/, 'Z');
+        var alarmObjects = runStepOrRecordError('alarms', function () {
+            return listAllObjects(INTERSIGHT_PATHS.alarms, buildAlarmFilter(alarmClearedSince), ALARM_SELECT);
         });
 
         if (serverInventory === null && chassisInventory === null && fabricInterconnectInventory === null) {
@@ -3279,8 +3799,12 @@ zabbix_export:
         attachBladesToChassis(chassisDevices, serverDevices);
 
         var allDevices = serverDevices.concat(chassisDevices, fabricInterconnectDevices);
+        var platformAlarms = attachAlarmsToDevices(alarmObjects, allDevices);
+        var inventoryComplete = serverInventory !== null && chassisInventory !== null && fabricInterconnectInventory !== null;
 
         var pushResult = pushDevicesToZabbix(allDevices, collectionTime);
+        var deviceIndex;
+        for (deviceIndex = 0; deviceIndex < allDevices.length; deviceIndex++) { delete allDevices[deviceIndex].alarms; }
 
         var serversForDiscovery = [], serverIndex;
         for (serverIndex = 0; serverIndex < serverDevices.length; serverIndex++) {
@@ -3302,12 +3826,13 @@ zabbix_export:
                 chassis: chassisDevices.length,
                 fi: fabricInterconnectDevices.length
             },
-            alarms: countAlarmsBySeverity(openAlarms),
+            alarms: countAlarmsBySeverity(alarmObjects),
             push: pushResult,
             servers: serversForDiscovery,
             chassis: chassisDevices,
             fis: fabricInterconnectDevices,
-            models: listDistinctModels(allDevices)
+            models: listDistinctModels(allDevices),
+            platform_alarms: (platformAlarms === null || !inventoryComplete) ? undefined : platformAlarms
         });
       parameters:
       - name: auth
@@ -3334,6 +3859,8 @@ zabbix_export:
         value: '{$INTERSIGHT.FLAT.SERVERS}'
       - name: percent_scale
         value: '{$INTERSIGHT.PERCENT.SCALE}'
+      - name: alarm_cleared_window
+        value: '{$INTERSIGHT.ALARM.CLEARED.WINDOW}'
       - name: zbx_url
         value: '{$ZABBIX.API.URL}'
       - name: zbx_token
@@ -3966,6 +4493,131 @@ zabbix_export:
           value: '{#CLASS}'
         - tag: model
           value: '{#MODEL}'
+    - uuid: 524e6c40626d4aad8d5cad9d82a69f29
+      name: Intersight alarms
+      type: DEPENDENT
+      key: intersight.alarm.discovery
+      master_item:
+        key: intersight.collect
+      lifetime_type: DELETE_AFTER
+      lifetime: '{$INTERSIGHT.ALARM.LOST.DELETE}'
+      enabled_lifetime_type: DISABLE_AFTER
+      enabled_lifetime: '{$INTERSIGHT.ALARM.LOST.DISABLE}'
+      lld_macro_paths:
+      - lld_macro: '{#ALARM.ID}'
+        path: $.id
+      - lld_macro: '{#ALARM.NAME}'
+        path: $.name
+      - lld_macro: '{#ALARM.CODE}'
+        path: $.code
+      - lld_macro: '{#ALARM.TARGET}'
+        path: $.target
+      preprocessing:
+      - type: JSONPATH
+        parameters:
+        - $.platform_alarms
+        error_handler: DISCARD_VALUE
+      item_prototypes:
+      - uuid: d6a43fc7d2e242f9b3e88c8b7cc52a0f
+        name: 'Alarm {#ALARM.NAME} on {#ALARM.TARGET}: severity'
+        type: DEPENDENT
+        key: intersight.alarm.severity[{#ALARM.ID}]
+        value_type: UNSIGNED
+        master_item:
+          key: intersight.collect
+        valuemap:
+          name: Intersight alarm severity
+        preprocessing:
+        - type: JSONPATH
+          parameters:
+          - $.platform_alarms[?(@.id=='{#ALARM.ID}')].severity.first()
+          error_handler: DISCARD_VALUE
+        - type: DISCARD_UNCHANGED_HEARTBEAT
+          parameters:
+          - 1h
+        tags:
+        - tag: component
+          value: alarm
+        - tag: alarm-code
+          value: '{#ALARM.CODE}'
+      - uuid: a1d6ee541df744009ae9bdef2bc6b049
+        name: 'Alarm {#ALARM.NAME} on {#ALARM.TARGET}: acknowledged'
+        type: DEPENDENT
+        key: intersight.alarm.ack[{#ALARM.ID}]
+        value_type: UNSIGNED
+        master_item:
+          key: intersight.collect
+        valuemap:
+          name: Intersight alarm acknowledged
+        preprocessing:
+        - type: JSONPATH
+          parameters:
+          - $.platform_alarms[?(@.id=='{#ALARM.ID}')].ack.first()
+          error_handler: DISCARD_VALUE
+        - type: DISCARD_UNCHANGED_HEARTBEAT
+          parameters:
+          - 1h
+        tags:
+        - tag: component
+          value: alarm
+        - tag: alarm-code
+          value: '{#ALARM.CODE}'
+      - uuid: 320f13c90a524843b955ce2da55972c8
+        name: 'Alarm {#ALARM.NAME} on {#ALARM.TARGET}: suppressed'
+        type: DEPENDENT
+        key: intersight.alarm.suppressed[{#ALARM.ID}]
+        value_type: UNSIGNED
+        master_item:
+          key: intersight.collect
+        valuemap:
+          name: Intersight alarm suppressed
+        preprocessing:
+        - type: JSONPATH
+          parameters:
+          - $.platform_alarms[?(@.id=='{#ALARM.ID}')].suppressed.first()
+          error_handler: DISCARD_VALUE
+        - type: DISCARD_UNCHANGED_HEARTBEAT
+          parameters:
+          - 1h
+        tags:
+        - tag: component
+          value: alarm
+        - tag: alarm-code
+          value: '{#ALARM.CODE}'
+      trigger_prototypes:
+      - uuid: d88bbc70264d4e0186c0d9e21bbe59d9
+        expression: last(/Cisco Intersight by API/intersight.alarm.severity[{#ALARM.ID}])=3 and last(/Cisco Intersight by API/intersight.alarm.ack[{#ALARM.ID}])>=0 and last(/Cisco Intersight by API/intersight.alarm.suppressed[{#ALARM.ID}])>=0 and nodata(/Cisco Intersight by API/intersight.alarm.severity[{#ALARM.ID}],{$INTERSIGHT.ALARM.NODATA})=0
+        name: 'Intersight alarm: {#ALARM.NAME} on {#ALARM.TARGET}'
+        priority: HIGH
+        opdata: 'Acknowledged in Intersight: {ITEM.LASTVALUE2}, suppressed: {ITEM.LASTVALUE3}'
+        description: Mirror of Intersight alarm {#ALARM.ID} (code {#ALARM.CODE}). Acknowledging or suppressing it in Intersight keeps the problem open; only Cleared closes it. Nothing done here is sent to Intersight.
+        tags:
+        - tag: component
+          value: alarm
+        - tag: alarm-code
+          value: '{#ALARM.CODE}'
+      - uuid: c85839bcf51f478581bf18cf399b5038
+        expression: last(/Cisco Intersight by API/intersight.alarm.severity[{#ALARM.ID}])=2 and last(/Cisco Intersight by API/intersight.alarm.ack[{#ALARM.ID}])>=0 and last(/Cisco Intersight by API/intersight.alarm.suppressed[{#ALARM.ID}])>=0 and nodata(/Cisco Intersight by API/intersight.alarm.severity[{#ALARM.ID}],{$INTERSIGHT.ALARM.NODATA})=0
+        name: 'Intersight alarm: {#ALARM.NAME} on {#ALARM.TARGET}'
+        priority: WARNING
+        opdata: 'Acknowledged in Intersight: {ITEM.LASTVALUE2}, suppressed: {ITEM.LASTVALUE3}'
+        description: Mirror of Intersight alarm {#ALARM.ID} (code {#ALARM.CODE}). Acknowledging or suppressing it in Intersight keeps the problem open; only Cleared closes it. Nothing done here is sent to Intersight.
+        tags:
+        - tag: component
+          value: alarm
+        - tag: alarm-code
+          value: '{#ALARM.CODE}'
+      - uuid: a417f95d4b234c2e8694bf7b5861bb57
+        expression: last(/Cisco Intersight by API/intersight.alarm.severity[{#ALARM.ID}])=1 and last(/Cisco Intersight by API/intersight.alarm.ack[{#ALARM.ID}])>=0 and last(/Cisco Intersight by API/intersight.alarm.suppressed[{#ALARM.ID}])>=0 and nodata(/Cisco Intersight by API/intersight.alarm.severity[{#ALARM.ID}],{$INTERSIGHT.ALARM.NODATA})=0
+        name: 'Intersight alarm: {#ALARM.NAME} on {#ALARM.TARGET}'
+        priority: INFO
+        opdata: 'Acknowledged in Intersight: {ITEM.LASTVALUE2}, suppressed: {ITEM.LASTVALUE3}'
+        description: Mirror of Intersight alarm {#ALARM.ID} (code {#ALARM.CODE}). Acknowledging or suppressing it in Intersight keeps the problem open; only Cleared closes it. Nothing done here is sent to Intersight.
+        tags:
+        - tag: component
+          value: alarm
+        - tag: alarm-code
+          value: '{#ALARM.CODE}'
     tags:
     - tag: class
       value: hardware
@@ -4020,3 +4672,41 @@ zabbix_export:
     - macro: '{$INTERSIGHT.CO2.G.KWH}'
       value: '0'
       description: Grid carbon intensity in gCO2/kWh. To fill in.
+    - macro: '{$INTERSIGHT.ALARM.CLEARED.WINDOW}'
+      value: 1d
+      description: Cleared alarms younger than this are still read, so that their problem closes.
+    - macro: '{$INTERSIGHT.ALARM.NODATA}'
+      value: 2h
+      description: An alarm item without value for this long closes its problem (alarm gone from Intersight without Cleared, or collector down). Must stay above the 1h heartbeat of the alarm items.
+    - macro: '{$INTERSIGHT.ALARM.LOST.DISABLE}'
+      value: 1d
+      description: 'Alarms no longer reported by Intersight: items disabled after this long. Must be shorter than {$INTERSIGHT.ALARM.LOST.DELETE} (Zabbix 7.0 "Low-level discovery").'
+    - macro: '{$INTERSIGHT.ALARM.LOST.DELETE}'
+      value: 7d
+      description: 'Alarms no longer reported by Intersight: items deleted after this long. Must be longer than {$INTERSIGHT.ALARM.LOST.DISABLE}.'
+    valuemaps:
+    - uuid: c89088396b8c4b6cb80ad8cd62652a2f
+      name: Intersight alarm severity
+      mappings:
+      - value: '0'
+        newvalue: Cleared
+      - value: '1'
+        newvalue: Info
+      - value: '2'
+        newvalue: Warning
+      - value: '3'
+        newvalue: Critical
+    - uuid: 136891ec8b194a7193f21bbaa5d38f67
+      name: Intersight alarm acknowledged
+      mappings:
+      - value: '0'
+        newvalue: 'No'
+      - value: '1'
+        newvalue: 'Yes'
+    - uuid: 12564d7498904ce0b242becc9c290da7
+      name: Intersight alarm suppressed
+      mappings:
+      - value: '0'
+        newvalue: 'No'
+      - value: '1'
+        newvalue: 'Yes'

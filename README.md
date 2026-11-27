@@ -70,7 +70,7 @@ Le template parent fait **tous** les appels Intersight, puis pousse un JSON par 
 
 ## Flux de données
 
-1. Le script `intersight.collect` lit l'inventaire : `compute/PhysicalSummaries`, `equipment/Chasses`, `network/ElementSummaries` et `cond/Alarms` (alarmes non acquittées).
+1. Le script `intersight.collect` lit l'inventaire : `compute/PhysicalSummaries`, `equipment/Chasses`, `network/ElementSummaries` et `cond/Alarms` (une seule requête : alarmes non Cleared, plus les alarmes Cleared récentes ; voir « Alarmes Intersight »).
 2. Il lit la télémétrie Druid via `/api/v1/telemetry/TimeSeries` (requêtes `groupBy`), groupée par `host.type` + `host.name` : 9 instruments (voir « Métriques collectées »).
 3. Il signe chaque requête avec ta **clé API v3** (`hs2019`, ECDSA P-256). Zabbix ne sait faire que du RSA, donc l'ECDSA est implémenté en JavaScript pur dans le script (nonce déterministe RFC 6979). Les modes `rsa` (clé v2) et `oauth` restent disponibles via `{$INTERSIGHT.AUTH}`.
 4. Il pousse les valeurs vers les hosts `intersight-<Moid>` par `history.push`.
@@ -107,6 +107,36 @@ Au premier cycle, `Push: values rejected` est normal : les hosts n'existent pas 
 ## Intersight Virtual Appliance
 
 La télémétrie n'existe sur l'appliance que si la collecte de métriques est active. Il faut soit un déploiement multi-nœuds avec un nœud de métriques (2 ou 4 nœuds ; pas en 3 nœuds), soit l'option de collecte en déploiement mono-nœud. Sans cela, l'inventaire, les alarmes et le firmware fonctionnent, mais les items de puissance, température, ventilateurs et réseau restent vides, et « API: last errors » signale les requêtes de télémétrie.
+
+## Alarmes Intersight → problèmes Zabbix
+
+Chaque alarme Intersight (`cond.Alarm`) devient un problème Zabbix **sur l'hôte de son équipement**. C'est un miroir à sens unique : rien n'est écrit vers Intersight, et acquitter, fermer ou commenter un problème dans Zabbix n'a aucun effet sur Intersight.
+
+**Rattachement.** Une alarme va sur l'équipement (serveur, châssis ou FI) dont le `Moid` est égal à son `AncestorMoId`. C'est vérifié sur une appliance ; `AffectedMoId`, vide sur les alarmes ouvertes, n'est pas utilisé. Les alarmes sans ancêtre (`AncestorMoId` vide, objets de la plateforme comme `iam.ApiKey` ou `softwarerepository.Authorization`) et celles dont l'ancêtre n'est pas un équipement lu par le collecteur vont sur l'hôte parent « Cisco Intersight » (liste `platform_alarms`).
+
+**Collecte.** Une seule requête `cond/Alarms` par cycle : toutes les alarmes non Cleared, plus les alarmes Cleared depuis `{$INTERSIGHT.ALARM.CLEARED.WINDOW}`. Lire les Cleared récentes permet de fermer leur problème (le guide Cisco « Intersight Alarms Reference Guide » indique qu'elles restent visibles 30 jours). Le nom de la personne qui a acquitté (`AcknowledgeBy`) n'est jamais lu ni poussé. Les alarmes de sévérité `None` (« pas de sévérité » dans le SDK) ne sont pas poussées. Les compteurs d'alarmes existants (« Alarms: critical », « Alarms (unacknowledged): … ») ne changent pas : ils ne comptent que les alarmes ouvertes et non acquittées.
+
+**Dans Zabbix**, une règle de découverte « Intersight alarms » sur les templates serveur, châssis, FI et sur le template parent crée, pour chaque alarme, trois items (`intersight.alarm.severity[…]`, `intersight.alarm.ack[…]`, `intersight.alarm.suppressed[…]`, avec tables de valeurs) et trois triggers exclusifs, tagués `component: alarm` et `alarm-code: <code>` :
+
+| Sévérité Intersight | Valeur | Problème Zabbix |
+|---|---|---|
+| Critical | 3 | High (et non Disaster : choix de l'utilisateur) |
+| Warning | 2 | Warning |
+| Info | 1 | Information (le prototype peut être désactivé si ces problèmes sont inutiles) |
+| Cleared | 0 | aucun : le problème est fermé |
+
+Un changement de sévérité ferme le problème et en ouvre un autre, à la nouvelle sévérité.
+
+**Acquittement et suppression** (états Acknowledged et Suppressed du cycle de vie Intersight : Active, Acknowledged, Suppressed, Cleared) : acquitter ou supprimer une alarme dans Intersight **ne ferme pas** le problème, puisque l'acquittement ne change pas la sévérité (guide Cisco). Seul Cleared le ferme. L'état est affiché dans les données opérationnelles du problème (« Acknowledged in Intersight: …, suppressed: … »). Pour cela, l'expression contient deux conditions toujours vraies, `last(ack)>=0` et `last(suppressed)>=0` : elles ne servent qu'à rendre ces items accessibles par `{ITEM.LASTVALUE2}` et `{ITEM.LASTVALUE3}`. Ces macros désignent l'item de la N-ième fonction de l'expression (vérifié dans le source de Zabbix 7.0), et les macros d'expression `{?…}` ne sont pas acceptées dans les données opérationnelles. À vérifier après import : si `{ITEM.LASTVALUE}` y affiche la valeur brute (0/1) ou le libellé de la table de valeurs.
+
+| Macro | Défaut | Rôle |
+|---|---|---|
+| `{$INTERSIGHT.ALARM.CLEARED.WINDOW}` | `1d` | ancienneté maximale des alarmes Cleared lues (template parent) |
+| `{$INTERSIGHT.ALARM.NODATA}` | `2h` | sans valeur pendant cette durée, le problème d'une alarme se ferme ; doit rester supérieure au heartbeat de 1 h des items d'alarme (« Discard unchanged with heartbeat ») |
+| `{$INTERSIGHT.ALARM.LOST.DISABLE}` | `1d` | alarme qui n'est plus remontée : items désactivés après ce délai (« Disable lost resources ») |
+| `{$INTERSIGHT.ALARM.LOST.DELETE}` | `7d` | items supprimés après ce délai (« Delete lost resources ») |
+
+**Contrainte :** `{$INTERSIGHT.ALARM.LOST.DELETE}` doit rester **plus long** que `{$INTERSIGHT.ALARM.LOST.DISABLE}` (doc Zabbix 7.0, « Low-level discovery »). Chacun de ces deux champs de la règle ne contient qu'une macro, rien d'autre : Zabbix exige qu'une macro y remplisse tout le champ (doc Zabbix 7.0, « User macros supported by location », note 1). Pour changer les délais, modifie la valeur des macros, pas les champs.
 
 ## Métriques collectées
 
@@ -182,6 +212,8 @@ Si un de ces points est faux, l'item « API: last errors » affiche l'appel en c
 - **Énergie** : `Energy: last 24h` est calculée comme puissance moyenne sur 24 h × 24, en Wh. C'est exact sur une fenêtre glissante, à condition d'avoir 24 h d'historique. Le coût et le CO₂ divisent ces Wh par 1000, car les macros sont exprimées par kWh.
 - **Historique du script maître** : il est à 0 (le JSON peut être gros). Pour déboguer, utiliser le bouton « Test ».
 - **Température** : les triggers comparent chaque capteur à **ses propres** seuils (`limit_high_critical`, `limit_high_degraded`), sur les équipements qui les remontent. Les températures CPU ne remontent que si l'hôte est allumé.
+- **Alarme disparue sans Cleared** : si une alarme disparaît d'Intersight sans passer par Cleared, son problème se ferme après `{$INTERSIGHT.ALARM.NODATA}` (2 h par défaut) grâce à `nodata()`. Ses items sont ensuite désactivés puis supprimés par la découverte (`{$INTERSIGHT.ALARM.LOST.DISABLE}`, `{$INTERSIGHT.ALARM.LOST.DELETE}`). Un collecteur en panne pendant cette durée ferme aussi les problèmes d'alarme ; ils se rouvrent au retour des données.
+- **Trigger d'alarme indéterminé** : si l'item d'acquittement ou de suppression d'une alarme devient non supporté, son trigger peut devenir indéterminé, car l'expression lit ces items (pour les données opérationnelles).
 - **Puissance châssis IMM** : c'est la somme de la puissance absorbée par les PSU (`hw.power`), Cisco ne remontant pas `hw.host.power` pour ces châssis.
 
 ## Ce que tu obtiens
@@ -189,6 +221,7 @@ Si un de ces points est faux, l'item « API: last errors » affiche l'appel en c
 - **Par équipement** : puissance moyenne et pic, état d'alimentation, énergie sur 24 h, température max, ventilateurs min/max, PSU (LLD : utilisation et sortie), ports (LLD filtrable), alarmes critiques et warning, modèle, numéro de série, firmware, IP de management. Les champs d'inventaire Zabbix sont remplis automatiquement.
 - **Par type** (LLD sur les modèles, groupe `Intersight/<Classe>/<Modèle>`) : somme, moyenne, min, max, nombre d'équipements remontant, énergie, coût, CO₂, température max.
 - **Par classe** : puissance totale, énergie, coût et CO₂ sur 24 h.
+- **Alarmes** : un problème Zabbix par alarme Intersight, sur l'hôte de son équipement (ou sur l'hôte parent pour les alarmes de la plateforme), fermé quand l'alarme passe à Cleared.
 - **Santé** : appels, erreurs, durée, valeurs poussées et rejetées, absence de données, alarmes globales.
 
 ## Performance de la signature hs2019

@@ -5,7 +5,7 @@
  *
  *  WHAT IT DOES (one run, every 5 minutes)
  *    1. Reads the inventory from the Intersight REST API:
- *         servers (rack + blade), chassis, Fabric Interconnects, unacknowledged alarms.
+ *         servers (rack + blade), chassis, Fabric Interconnects, alarms (open + recently cleared).
  *    2. Reads telemetry (Apache Druid "groupBy" queries), grouped by device type and name:
  *         power, temperatures, fans, power supplies, memory, CPU, network.
  *    3. Builds one JSON object per device and pushes it, through the Zabbix API method
@@ -31,6 +31,7 @@
  *    network_datasource  Druid dataSource of network metrics (Cisco doc: NetworkInterfaces)
  *    component_dim  Druid attribute naming one PSU / sensor / port (Cisco doc: name)
  *    flat_servers   1 = all servers in the "servers" LLD, 0 = rack servers only (7.4 nested)
+ *    alarm_cleared_window  how far back Cleared alarms are read, Zabbix time suffix (1d)
  *    percent_scale  multiplier turning the raw utilizations into % (default 100: Intersight
  *                   stores them as 0-1 ratios, checked in the raw data of the user's
  *                   appliance, although Cisco's doc gives the unit "%")
@@ -48,10 +49,23 @@
  *      psus  [ {name, util, out_w, in_w} ],
  *      ports [ {name, role, rx_bps, tx_bps, speed_bps, util, up, errors} ]  (bits per second),
  *      blades [ {moid, display, model} ]   (chassis only)
+ *      alarms [ alarm ]   alarms whose AncestorMoId is this device's Moid (absent if the
+ *                         alarm request failed, so that the alarm LLD discards the value);
+ *                         pushed only, removed from servers / chassis / fis below
+ *    Alarm object (one cond.Alarm; fields: CiscoDevNet/intersight-python cond_alarm.py):
+ *      id (Moid), name, code, severity (0 Cleared, 1 Info, 2 Warning, 3 Critical),
+ *      ack (1 = Acknowledge, 0 = None), suppressed (0/1), target (AffectedMoDisplayName),
+ *      description, last_transition (LastTransitionTime);
+ *      ancestor_type (AncestorMoType) in platform_alarms only.
+ *      AcknowledgeBy (a person's name) is never read nor pushed.
  *    Returned document:
  *      ts, api {calls, errors[], duration_s, sign_s}, counts {servers, chassis, fi},
  *      alarms {critical, warning, info}, push {enabled, sent, failed},
- *      servers[], chassis[], fis[], models [ {class, model, group} ]
+ *      servers[], chassis[], fis[], models [ {class, model, group} ],
+ *      platform_alarms [ alarm ]   alarms on no known device (empty AncestorMoId, e.g.
+ *                                  iam.ApiKey, or an ancestor that is not a device read here);
+ *                                  absent if the alarm request or an inventory list failed
+ *    alarms {critical, warning, info} counts only open, unacknowledged alarms (as before).
  *
  *  METRIC SOURCES (rule: no inferred field name)
  *    Every Druid field queried below appears in an "Available metrics" table of the Cisco
@@ -100,6 +114,9 @@ var CONFIG = {
     // appliance; the intersight-grafana dashboards also multiply them by 100), although
     // Cisco's doc gives the unit "%". checkPercentage() flags any value above 100 %.
     percentScale: parseFloat(itemParameters.percent_scale || '100'),
+    // Cleared alarms younger than this are still read, so that their problem closes
+    // (Cisco "Intersight Alarms Reference Guide": Cleared alarms stay visible 30 days).
+    alarmClearedWindowSeconds: parseDurationSeconds(itemParameters.alarm_cleared_window, 86400),
     // Push is enabled only when both URL and token are set (not left as raw macros).
     pushEnabled: !!(itemParameters.zbx_url && itemParameters.zbx_token &&
         itemParameters.zbx_url.indexOf('{$') !== 0)
@@ -115,8 +132,19 @@ var INTERSIGHT_PATHS = {
     oauthToken: '/iam/token'
 };
 
-// Only alarms still open and not acknowledged by an operator are counted.
-var OPEN_ALARMS_FILTER = "Acknowledge eq 'None' and Severity ne 'Cleared'";
+// One request for all alarms: every alarm not Cleared, plus the alarms Cleared since
+// "since" (ISO date without milliseconds, e.g. 2026-11-25T00:00:00Z). Accepted by the user's
+// appliance, which returned exactly the union of both sets.
+function buildAlarmFilter(since) {
+    return "Severity ne 'Cleared' or (Severity eq 'Cleared' and LastTransitionTime gt " + since + ")";
+}
+// cond.Alarm fields (CiscoDevNet/intersight-python, intersight/model/cond_alarm.py), all
+// present on the user's appliance. AcknowledgeBy is left out on purpose: a person's name.
+var ALARM_SELECT = 'Moid,Name,Code,Severity,Description,Acknowledge,Suppressed,AncestorMoId,' +
+    'AncestorMoType,LastTransitionTime,CreationTime,AffectedMoDisplayName';
+// Severity -> number of the alarm items. Severity 'None' ("no severity" in the SDK) is not in
+// this table: such alarms are not pushed (user decision).
+var ALARM_SEVERITY_CODES = { Cleared: 0, Info: 1, Warning: 2, Critical: 3 };
 
 // Page size for list requests (Intersight maximum is 1000).
 var PAGE_SIZE = 1000;
@@ -225,6 +253,12 @@ function minIgnoringNull(first, second) {
     if (first === null || first === undefined) { return second; }
     if (second === null || second === undefined) { return first; }
     return Math.min(first, second);
+}
+
+// Zabbix time suffix ("30m", "1d", "1w", or seconds) -> seconds; fallback when invalid.
+function parseDurationSeconds(text, fallbackSeconds) {
+    var match = /^(\d+)([smhdw]?)$/.exec(String(text));
+    return match ? parseInt(match[1], 10) * { '': 1, s: 1, m: 60, h: 3600, d: 86400, w: 604800 }[match[2]] : fallbackSeconds;
 }
 
 function roundToOneDecimal(number) {
@@ -1382,9 +1416,12 @@ function listDistinctModels(allDevices) {
     return models;
 }
 
+// Counts open, unacknowledged alarms only, as the former dedicated request did
+// (Acknowledge eq 'None' and Severity ne 'Cleared'). Acknowledge defaults to None (SDK).
 function countAlarmsBySeverity(alarmObjects) {
     var counts = { critical: 0, warning: 0, info: 0 }, index;
     for (index = 0; alarmObjects && index < alarmObjects.length; index++) {
+        if (alarmObjects[index].Acknowledge === 'Acknowledge' || alarmObjects[index].Severity === 'Cleared') { continue; }
         switch (String(alarmObjects[index].Severity)) {
             case 'Critical': counts.critical++; break;
             case 'Warning': counts.warning++; break;
@@ -1392,6 +1429,40 @@ function countAlarmsBySeverity(alarmObjects) {
         }
     }
     return counts;
+}
+
+// Puts each alarm on the device whose Moid equals its AncestorMoId (checked on the user's
+// appliance for servers, chassis and FIs; AffectedMoId is empty on open alarms, so it is not
+// used). Other alarms are returned for the parent host. Null when the request failed: no
+// "alarms" list is set then, so the alarm LLD rules discard the value instead of losing
+// every alarm. One-way mirror: nothing is ever written to Intersight.
+function attachAlarmsToDevices(alarmObjects, devices) {
+    var deviceByMoid = {}, platformAlarms = [], index, alarm, severity, entry, device;
+    if (alarmObjects === null) { return null; }
+    for (index = 0; index < devices.length; index++) {
+        devices[index].alarms = [];
+        deviceByMoid[devices[index].moid] = devices[index];
+    }
+    for (index = 0; index < alarmObjects.length; index++) {
+        alarm = alarmObjects[index];
+        severity = ALARM_SEVERITY_CODES.hasOwnProperty(alarm.Severity) ? ALARM_SEVERITY_CODES[alarm.Severity] : null;
+        if (severity === null) { continue; }
+        entry = {
+            id: alarm.Moid, name: alarm.Name || '', code: alarm.Code || '', severity: severity,
+            ack: alarm.Acknowledge === 'Acknowledge' ? 1 : 0, suppressed: alarm.Suppressed ? 1 : 0,
+            target: alarm.AffectedMoDisplayName || '', description: alarm.Description || '',
+            last_transition: alarm.LastTransitionTime || ''
+        };
+        device = (alarm.AncestorMoId && deviceByMoid.hasOwnProperty(alarm.AncestorMoId)) ? deviceByMoid[alarm.AncestorMoId] : null;
+        if (device) {
+            device.alarms.push(entry);
+        }
+        else {
+            entry.ancestor_type = alarm.AncestorMoType || '';
+            platformAlarms.push(entry);
+        }
+    }
+    return platformAlarms;
 }
 
 // =====================================================================================
@@ -1455,8 +1526,11 @@ var chassisInventory = runStepOrRecordError('chassis', function () {
 var fabricInterconnectInventory = runStepOrRecordError('fabric_interconnects', function () {
     return listAllObjects(INTERSIGHT_PATHS.fabricInterconnects);
 });
-var openAlarms = runStepOrRecordError('alarms', function () {
-    return listAllObjects(INTERSIGHT_PATHS.alarms, OPEN_ALARMS_FILTER, 'Severity');
+// Date without milliseconds, the format accepted by the appliance (2026-11-25T00:00:00Z).
+var alarmClearedSince = new Date(new Date().getTime() - CONFIG.alarmClearedWindowSeconds * 1000)
+    .toISOString().replace(/\.\d+Z$/, 'Z');
+var alarmObjects = runStepOrRecordError('alarms', function () {
+    return listAllObjects(INTERSIGHT_PATHS.alarms, buildAlarmFilter(alarmClearedSince), ALARM_SELECT);
 });
 
 // Nothing at all: fail the item, so that the "no data" trigger fires.
@@ -1481,9 +1555,18 @@ assignUniqueDisplayNames(fabricInterconnectDevices);
 attachBladesToChassis(chassisDevices, serverDevices);
 
 var allDevices = serverDevices.concat(chassisDevices, fabricInterconnectDevices);
+var platformAlarms = attachAlarmsToDevices(alarmObjects, allDevices);
+// A failed server, chassis or FI list would move the alarms of its devices to platform_alarms
+// until the next run: platform_alarms is then not sent, so the parent alarm LLD discards the
+// value. Alarms of the devices that were read are still pushed.
+var inventoryComplete = serverInventory !== null && chassisInventory !== null && fabricInterconnectInventory !== null;
 
 // --- Push to the discovered hosts
 var pushResult = pushDevicesToZabbix(allDevices, collectionTime);
+// servers / chassis / fis below share these objects: the attached alarms belong to the device
+// hosts only, the parent result keeps platform_alarms alone.
+var deviceIndex;
+for (deviceIndex = 0; deviceIndex < allDevices.length; deviceIndex++) { delete allDevices[deviceIndex].alarms; }
 
 // --- Servers listed in the parent "servers" LLD (blades excluded in 7.4 nested mode)
 var serversForDiscovery = [], serverIndex;
@@ -1508,10 +1591,11 @@ return JSON.stringify({
         chassis: chassisDevices.length,
         fi: fabricInterconnectDevices.length
     },
-    alarms: countAlarmsBySeverity(openAlarms),
+    alarms: countAlarmsBySeverity(alarmObjects),
     push: pushResult,
     servers: serversForDiscovery,
     chassis: chassisDevices,
     fis: fabricInterconnectDevices,
-    models: listDistinctModels(allDevices)
+    models: listDistinctModels(allDevices),
+    platform_alarms: (platformAlarms === null || !inventoryComplete) ? undefined : platformAlarms
 });
