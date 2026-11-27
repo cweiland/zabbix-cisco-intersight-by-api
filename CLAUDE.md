@@ -66,7 +66,7 @@ python3 tools/check_metrics_against_doc.py <Supported_Metrices.md>
 - CI runner pinned to `ubuntu-24.04` like the dev container (ubuntu-latest was moving to 26.04; on it the stalled-firewall test failed because its `timeout` did not kill a grandchild). Tests must not depend on timeout signalling a process group: in the container, PID 1 exiting kills everything anyway.
 - CI and supply chain (`tests/repository_config.test.js`): every GitHub Action pinned by full commit SHA with the release in a comment (`# v7.0.1`), `permissions: contents: read`, `persist-credentials: false`, Dependabot for github-actions, devcontainers, docker and pip. When adding an action, look up its SHA (`/repos/<owner>/<action>/commits/<tag>`), never use a tag alone.
 - Run `tools/ci.sh` before every commit: same steps as the GitHub CI. Step 3 compares `templates/` before and after generation (not with the git index), so a regenerated but unstaged template passes.
-- Never commit `params.json` (zabbix_js parameters, contains the private key), `cisco-docs/` (Cisco pages used to rebuild the catalog) or `docs/Zabbix_Documentation_*.pdf` (Zabbix manual: its "Copyright notice", last page, forbids publishing or distributing it except as Zabbix does, on a Zabbix web site or with the software).
+- Never commit `params.json` (zabbix_js parameters, contains the private key), `cisco-docs/` (Cisco pages used to rebuild the catalog), `Supported_Metrices.md` (Cisco documentation, not redistributable) or `docs/Zabbix_Documentation_*.pdf` (Zabbix manual: its "Copyright notice", last page, forbids publishing or distributing it except as Zabbix does, on a Zabbix web site or with the software).
 
 ## Rule: no inferred metric names (maintainer requirement)
 
@@ -121,7 +121,7 @@ python3 tools/check_metrics_against_doc.py <Supported_Metrices.md>
 
 - **Import into Zabbix 7.0: OK** (7.0-5 had failed with `Invalid parameter "/7/params": value is too long`, fixed in 7.0-6). Fix any future import error in the generator, not in the YAML.
 - **ECDSA speed in Duktape:** item "API: signing time (hs2019)" stays below the 90 s threshold of the run-duration trigger (item timeout 120 s). No optimisation needed for now; if it grows: fixed-base precomputation table for G, or fewer `TELEMETRY_QUERIES`.
-- **hs2019 signing (EC P-256 mode) accepted by the appliance:** inventory is collected and "API: last errors" is empty. The signing string order is therefore right for this appliance (RSA and OAuth modes still untested).
+- **hs2019 signing (EC P-256 mode) accepted by the design appliance:** inventory is collected and "API: last errors" is empty. The signing string order is therefore right for the design appliance (RSA and OAuth modes still untested).
 - **Blade↔chassis matching by `RegisteredDevice.Moid:ChassisId` FAILS:** `blades` was empty in every chassis; the maintainer compared `chassis_key` values: the `RegisteredDevice.Moid` part differs between a blade and its chassis. Fix (not yet checked on the design appliance): match on `compute.PhysicalSummary.EquipmentChassis.Moid` == chassis `Moid` (field from the Intersight API schema, CiscoDevNet/intersight-python 1.0.11.x `compute_physical_summary_all_of.py`), old key only as fallback; `servers[].chassis_moid` shows the value read. Only affects the 7.4 nested mode (`flat_servers=0`); in 7.0 all servers are discovered anyway.
 
 ### Telemetry `host.id` (design appliance, 2026-11-27)
@@ -149,14 +149,14 @@ python3 tools/check_metrics_against_doc.py <Supported_Metrices.md>
 - An alarm keeps its `Moid` until Cleared; a Cleared alarm keeps its `OrigSeverity` (Critical or Warning), with a `LastTransitionTime` later than its `CreationTime`.
 - Alarms without ancestor have `AncestorMoId = ''`: the filter `eq ''` finds alarms, `eq null` none. Their `AffectedMoType` and `AncestorMoType` are empty too. Their affected object (`AffectedMo.ObjectType`) is a platform object: `iam.ApiKey` or `softwarerepository.Authorization`, the only types seen (list not exhaustive).
 - The combined filter `Severity ne 'Cleared' or (Severity eq 'Cleared' and LastTransitionTime gt <date>)` is accepted and returns exactly the union of both sets.
-- Fields `AncestorMoId`, `AncestorMoType`, `Acknowledge`, `Suppressed`, `LastTransitionTime` and `OrigSeverity` exist on the appliance.
+- Fields `AncestorMoId`, `AncestorMoType`, `Acknowledge`, `Suppressed`, `LastTransitionTime` and `OrigSeverity` exist on the design appliance.
 - Volume: everything fits in one page of 1,000 (`PAGE_SIZE`) on the design appliance.
 - Design decisions (maintainer, 2026-11-26): Critical -> High (not Disaster); Info alarms raise problems (prototype can be disabled); Cleared window 1d; lost resources disabled after 1d, deleted after 7d; Severity `None` (SDK enum) not pushed; alarm items use a 1h heartbeat with `{$INTERSIGHT.ALARM.NODATA}` = 2h; `AcknowledgeBy` (a person's name) is never selected nor pushed.
 
 ## NOT verified yet (first things to check on the real system)
 
 - Whether `{ITEM.LASTVALUE2}` / `{ITEM.LASTVALUE3}` in the alarm triggers' operational data show the raw 0/1 or the value map label: check after import.
-- **Inventory fields** not confirmed on the appliance: FI `Version` and `OutOfBandIpAddress`, chassis `OperState`.
+- **Inventory fields** not confirmed on the design appliance: FI `Version` and `OutOfBandIpAddress`, chassis `OperState`.
 - **Response shapes**: list endpoints are assumed to return `{Results: [...]}` (the groupBy `[{event: {...}}]` shape is documented by the Metrics Explorer example).
 - **`host.id` on the other instruments:** only `hw.host` and `hw.power_supply` were tested on the design appliance. Not verified for the other instruments (`hw.network` on `NetworkInterfaces`, `hw.temperature`, etc.); the doc describes the same attribute. Rows without `host.id` use the name fallback.
 - `hw.status` is deliberately not used: its "one series per state" semantics were unclear. Left pending (maintainer decision, 2026-11-24).

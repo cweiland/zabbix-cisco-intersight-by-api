@@ -67,9 +67,11 @@ Host github.com
 git remote set-url origin git@github.com:<propriétaire>/<dépôt>.git
 ```
 
-5. Vérifiez que l'agent SSH de Windows est arrêté :
+5. Désactivez et arrêtez l'agent SSH de Windows, puis vérifiez-le. Il faut une fenêtre PowerShell lancée avec « Exécuter en tant qu'administrateur » ([doc Microsoft, « Set-Service »](https://learn.microsoft.com/en-us/powershell/module/microsoft.powershell.management/set-service?view=powershell-5.1)) :
 
 ```powershell
+Set-Service -Name ssh-agent -StartupType Disabled
+Set-Service -Name ssh-agent -Status Stopped
 Get-Service ssh-agent | Select-Object Name, Status, StartType   # attendu : Stopped, Disabled
 ```
 

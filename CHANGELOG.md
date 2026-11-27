@@ -5,6 +5,7 @@
   - **README**: `README.md` is now in English; the French version is in `README-fr.md`. Each starts with a line that links to the other language.
   - **CHANGELOG**: in English only, older entries included.
   - **Guides of `docs/`** in both languages: `docs/UPGRADE_7.4.md` and `docs/DEVCONTAINER_SECURITY.md` in English, `docs/UPGRADE_7.4_FR.md` and `docs/DEVCONTAINER_SECURITE_FR.md` in French (names unchanged). Each pair starts with a line that links to the other language.
+  - **Devcontainer guide**: step to disable and stop the Windows SSH agent (`Set-Service`, as administrator) before the existing check (Microsoft doc, "Set-Service").
   - **Contribution guide**: new `CONTRIBUTING.md` (English) and `CONTRIBUTING-fr.md` (French), which gather the rules that already apply in the repository. Every contribution is distributed under the license of the project, `AGPL-3.0-only`.
   - Test: `tests/bilingual_docs.test.js` (each pair exists, each file links to the other language).
 - **Template vendor**: `Custom` → `cweiland` (owner of the repository) on the 4 templates. The version (`7.0-6`) and the UUIDs do not change. Not verified: the effect of this change on an already imported template (the Zabbix 7.0 doc does not describe it).
