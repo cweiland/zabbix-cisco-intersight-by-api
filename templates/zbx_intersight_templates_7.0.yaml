@@ -4054,11 +4054,11 @@ zabbix_export:
         value: health
       triggers:
       - uuid: 27372f44d4b24758bda014c63e2e6c22
-        expression: last(/Cisco Intersight by API/intersight.api.push.max.bytes)>{$INTERSIGHT.RAW.SIZE.WARN}
+        expression: last(/Cisco Intersight by API/intersight.api.push.max.bytes)>{$INTERSIGHT.RAW.SIZE.WARN} and nodata(/Cisco Intersight by API/intersight.api.push.max.bytes,20m)=0
         name: 'Intersight: pushed value larger than {$INTERSIGHT.RAW.SIZE.WARN} bytes'
         priority: WARNING
         opdata: 'Largest: {ITEM.LASTVALUE1}'
-        description: 'The largest JSON pushed to the Text item intersight.raw (stored in the database) is above {$INTERSIGHT.RAW.SIZE.WARN} bytes, in UTF-8. Zabbix truncates a Text value before storing it: 65536 bytes on MySQL, 65536 characters on PostgreSQL (Zabbix 7.0 manual, "Creating an item", "Text data limits"); a MySQL TEXT column holds 65,535 bytes (MySQL 8.0 manual, "String Data Type Syntax"). A truncated value is no longer valid JSON in the history; the effect on the dependent items has not been tested. The device is in item "API: device of the largest pushed value" (host intersight-<Moid>).'
+        description: 'The largest JSON pushed to the Text item intersight.raw (stored in the database) is above {$INTERSIGHT.RAW.SIZE.WARN} bytes, in UTF-8. Zabbix truncates a Text value before storing it: 65536 bytes on MySQL, 65536 characters on PostgreSQL (Zabbix 7.0 manual, "Creating an item", "Text data limits"); a MySQL TEXT column holds 65,535 bytes (MySQL 8.0 manual, "String Data Type Syntax"). A truncated value is no longer valid JSON in the history; the effect on the dependent items has not been tested. The device is in item "API: device of the largest pushed value" (host intersight-<Moid>). When the measurements stop (push disabled, no device), the missing value is discarded and the problem closes after 20 minutes without a measurement (nodata, Zabbix 7.0 manual, "History functions").'
     - uuid: 42dba8db6bbf4a90975ac28123834536
       name: 'API: device of the largest pushed value'
       type: DEPENDENT

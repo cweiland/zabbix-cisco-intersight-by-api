@@ -136,6 +136,10 @@ fabricInterconnects = [];
 output = runCollector(true);
 check('no device: max_push_bytes and max_push_moid absent',
   !('max_push_bytes' in output.api) && !('max_push_moid' in output.api) && output.push.enabled === 1 && pushedValues.length === 0);
+// Both at once: still no measurement (the trigger then closes through nodata(), see below).
+output = runCollector(false);
+check('push disabled and no device: max_push_bytes and max_push_moid absent',
+  !('max_push_bytes' in output.api) && !('max_push_moid' in output.api) && output.push.enabled === 0 && pushedValues.length === 0);
 
 check(`every Intersight request signature verifies (${verified.length} requests)`, verified.length > 0 && verified.every(Boolean));
 
@@ -153,10 +157,14 @@ check('item intersight.api.push.max.bytes: dependent on intersight.collect, UNSI
   sizeItem.includes('value_type: UNSIGNED') && sizeItem.includes('key: intersight.collect') &&
   sizeItem.includes('units: B\n') && sizeItem.includes('- $.api.max_push_bytes\n') &&
   sizeItem.includes('error_handler: DISCARD_VALUE'));
-check('trigger WARNING: last(...max.bytes) > {$INTERSIGHT.RAW.SIZE.WARN}, description cites the MySQL limit and its source',
-  sizeItem.includes('expression: last(/Cisco Intersight by API/intersight.api.push.max.bytes)>{$INTERSIGHT.RAW.SIZE.WARN}\n') &&
+// nodata(): a missing value is discarded, so without it the problem would stay open forever
+// once the measurements stop (push disabled, no device). Whole expression, in this order.
+check('trigger WARNING: last(...max.bytes) > {$INTERSIGHT.RAW.SIZE.WARN} and nodata(...max.bytes,20m)=0, description cites the MySQL limit and its source',
+  sizeItem.includes('expression: last(/Cisco Intersight by API/intersight.api.push.max.bytes)>{$INTERSIGHT.RAW.SIZE.WARN}' +
+    ' and nodata(/Cisco Intersight by API/intersight.api.push.max.bytes,20m)=0\n') &&
   sizeItem.includes('priority: WARNING') && sizeItem.includes('65,535 bytes') &&
-  sizeItem.includes('MySQL 8.0 manual, "String Data Type Syntax"') && sizeItem.includes('"Text data limits"'));
+  sizeItem.includes('MySQL 8.0 manual, "String Data Type Syntax"') && sizeItem.includes('"Text data limits"') &&
+  sizeItem.includes('closes after 20 minutes without a measurement') && sizeItem.includes('"History functions"'));
 check('item intersight.api.push.max.moid: dependent, CHAR, $.api.max_push_moid, DISCARD_VALUE',
   moidItem.includes('type: DEPENDENT') && moidItem.includes('key: intersight.api.push.max.moid\n') &&
   moidItem.includes('value_type: CHAR') && moidItem.includes('- $.api.max_push_moid\n') &&

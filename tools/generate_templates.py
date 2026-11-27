@@ -532,7 +532,9 @@ RAW_SIZE_DESCRIPTION = (
     '"Text data limits"); a MySQL TEXT column holds 65,535 bytes (MySQL 8.0 manual, "String Data Type '
     'Syntax"). A truncated value is no longer valid JSON in the history; the effect on the dependent '
     'items has not been tested. The device is in item "API: device of the largest pushed value" '
-    '(host intersight-<Moid>).')
+    '(host intersight-<Moid>). When the measurements stop (push disabled, no device), the missing value is '
+    'discarded and the problem closes after 20 minutes without a measurement (nodata, Zabbix 7.0 manual, '
+    '"History functions").')
 
 
 # ------------------------------------------------------------------ parent template
@@ -592,7 +594,11 @@ def parent(script):
         # Both items discard a missing value (push disabled, no device).
         dep(T, M, 'API: largest pushed value', 'intersight.api.push.max.bytes', '$.api.max_push_bytes', 'UNSIGNED',
             units='B', tags=tag('health'),
-            triggers=[trig(T, 'rawsize', 'last(/$T/intersight.api.push.max.bytes)>{$INTERSIGHT.RAW.SIZE.WARN}',
+            # nodata(): without it the problem would never close once the measurements stop (push
+            # disabled, no device: the value is discarded, so last() keeps the old one). 20m as
+            # the "intersight.api.calls" trigger; {$INTERSIGHT.NODATA} is not on this template.
+            triggers=[trig(T, 'rawsize', 'last(/$T/intersight.api.push.max.bytes)>{$INTERSIGHT.RAW.SIZE.WARN}'
+                                         ' and nodata(/$T/intersight.api.push.max.bytes,20m)=0',
                            'Intersight: pushed value larger than {$INTERSIGHT.RAW.SIZE.WARN} bytes', 'WARNING',
                            RAW_SIZE_DESCRIPTION, opdata='Largest: {ITEM.LASTVALUE1}')]),
         dep(T, M, 'API: device of the largest pushed value', 'intersight.api.push.max.moid', '$.api.max_push_moid',
