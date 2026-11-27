@@ -205,6 +205,28 @@ def alarm_discovery(T, master, path):
     }
 
 
+# ------------------------------------------------------------------ PSU and port discovery
+# Lost resources of the PSU and port rules. Without enabled_lifetime_type, the Zabbix 7.0 import
+# defaults to DISABLE_IMMEDIATELY (C70XmlValidator.php): one run without telemetry (psus / ports
+# set to []) disabled every PSU and port until the next run. One macro per field, nothing else
+# ("User macros supported by location", note 1).
+COMPONENT_LLD_LIFETIME = {
+    'lifetime_type': 'DELETE_AFTER', 'lifetime': '{$INTERSIGHT.LLD.LOST.DELETE}',
+    'enabled_lifetime_type': 'DISABLE_AFTER', 'enabled_lifetime': '{$INTERSIGHT.LLD.LOST.DISABLE}',
+}
+
+
+def component_lld_macros():
+    return [
+        macro('{$INTERSIGHT.LLD.LOST.DISABLE}', '1h',
+              'PSUs and ports no longer reported: items disabled after this long. Must be shorter than '
+              '{$INTERSIGHT.LLD.LOST.DELETE} (Zabbix 7.0 "Low-level discovery").'),
+        macro('{$INTERSIGHT.LLD.LOST.DELETE}', '7d',
+              'PSUs and ports no longer reported: items deleted after this long. Must be longer than '
+              '{$INTERSIGHT.LLD.LOST.DISABLE}.'),
+    ]
+
+
 # ------------------------------------------------------------------ child templates
 def child(tpl, cls, label, extra_items):
     T = tpl
@@ -253,7 +275,7 @@ def child(tpl, cls, label, extra_items):
 
     lld_psu = {
         'uuid': uid(T, 'psu.discovery'), 'name': 'PSU discovery', 'type': 'DEPENDENT',
-        'key': 'intersight.psu.discovery', 'master_item': {'key': 'intersight.raw'}, 'lifetime': '7d',
+        'key': 'intersight.psu.discovery', 'master_item': {'key': 'intersight.raw'}, **COMPONENT_LLD_LIFETIME,
         'lld_macro_paths': [{'lld_macro': '{#PSU}', 'path': '$.name'}],
         'preprocessing': [{'type': 'JSONPATH', 'parameters': ['$.psus'],
                            'error_handler': 'CUSTOM_VALUE', 'error_handler_params': '[]'}],
@@ -279,7 +301,7 @@ def child(tpl, cls, label, extra_items):
 
     lld_port = {
         'uuid': uid(T, 'port.discovery'), 'name': 'Network port discovery', 'type': 'DEPENDENT',
-        'key': 'intersight.port.discovery', 'master_item': {'key': 'intersight.raw'}, 'lifetime': '7d',
+        'key': 'intersight.port.discovery', 'master_item': {'key': 'intersight.raw'}, **COMPONENT_LLD_LIFETIME,
         'filter': {'evaltype': 'AND', 'conditions': [
             {'macro': '{#PORT}', 'value': '{$INTERSIGHT.PORT.MATCHES}', 'formulaid': 'A'},
             {'macro': '{#PORT}', 'value': '{$INTERSIGHT.PORT.NOT_MATCHES}', 'operator': 'NOT_MATCHES_REGEX',
@@ -354,7 +376,7 @@ def child(tpl, cls, label, extra_items):
             macro('{$INTERSIGHT.PORT.ROLE.NOT_MATCHES}', '^(unconfigured|vethernet|vfc|vnic|vhba)$',
                   'Regex of port roles (hw.network.port.role) to ignore. Default: unconfigured and virtual '
                   'interfaces, as excluded by the intersight-grafana dashboards.'),
-        ] + alarm_macros(),
+        ] + component_lld_macros() + alarm_macros(),
         'valuemaps': [{'uuid': uid(T, 'vm'), 'name': 'Power state',
                        'mappings': [{'value': '0', 'newvalue': 'Off'}, {'value': '1', 'newvalue': 'On'}]},
                       {'uuid': uid(T, 'vm-link'), 'name': 'Link state',

@@ -1,6 +1,10 @@
 # Changelog
 
 ## Non publié
+- **Correctif : PSU et ports désactivés au premier cycle sans télémétrie.** Les règles « PSU discovery » et « Network port discovery » ne fixaient que la suppression (`lifetime: 7d`). À l'import dans Zabbix 7.0, la désactivation prend alors la valeur par défaut « immédiatement » (`DISABLE_IMMEDIATELY`, code de Zabbix 7.0, `C70XmlValidator.php`). Or le collecteur envoie des listes `psus` et `ports` vides quand un équipement n'a pas de télémétrie pendant un cycle : toutes ses PSU et tous ses ports étaient donc désactivés, puis réactivés au cycle suivant (doc Zabbix 7.0, « Low-level discovery »).
+  - Désormais, sur les trois templates d'équipement : désactivation après `{$INTERSIGHT.LLD.LOST.DISABLE}` (`1h` par défaut), suppression après `{$INTERSIGHT.LLD.LOST.DELETE}` (`7d` par défaut, comme avant).
+  - **La suppression doit rester plus longue que la désactivation** (doc Zabbix 7.0, « Low-level discovery »). Chaque champ ne contient qu'une macro : modifier la valeur des macros, pas les champs.
+  - La règle des alarmes garde ses propres macros (`{$INTERSIGHT.ALARM.LOST.*}`).
 - **Alarmes Intersight → problèmes Zabbix** : chaque alarme Intersight devient un problème sur l'hôte de son équipement (serveur, châssis ou FI dont le `Moid` est égal à l'`AncestorMoId` de l'alarme). Les alarmes sans équipement connu (objets de la plateforme, ancêtre inconnu) vont sur l'hôte parent. Miroir à sens unique : rien n'est écrit vers Intersight. Détails dans le README, section « Alarmes Intersight ».
   - Une seule requête `cond/Alarms` par cycle (alarmes non Cleared + alarmes Cleared récentes) remplace l'ancienne requête des alarmes non acquittées. Les compteurs d'alarmes existants ne changent pas. `AcknowledgeBy` (nom d'une personne) n'est jamais lu.
   - Nouvelle règle de découverte « Intersight alarms » sur les quatre templates : items `intersight.alarm.severity[…]`, `.ack[…]`, `.suppressed[…]` (heartbeat 1 h), trois triggers exclusifs, tags `component: alarm` et `alarm-code`.
