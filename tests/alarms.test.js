@@ -1,6 +1,6 @@
 // Intersight alarms mirrored as Zabbix problems (collector side and template side).
 // Fixture alarms only (fictitious Moids, names and codes): no value from a real appliance.
-// Facts checked on the user's appliance (CLAUDE.md, 2026-11-26): AncestorMoId of an alarm is the
+// Facts checked on a design appliance (CLAUDE.md, 2026-11-26): AncestorMoId of an alarm is the
 // Moid of its server / chassis / FI; alarms without ancestor have AncestorMoId = ''; the combined
 // filter "not Cleared or Cleared since <date>" is accepted.
 const crypto = require('crypto'), fs = require('fs'), path = require('path');
@@ -31,7 +31,7 @@ const FIXTURE_ALARMS = [
     Suppressed: false, AncestorMoId: '', AncestorMoType: '' },
   { Moid: 'alarm-unknown', Name: 'FixtureUnknownAncestorAlarm', Code: 'F0006', Severity: 'Critical', Acknowledge: 'None',
     Suppressed: false, AncestorMoId: 'not-a-device', AncestorMoType: 'compute.Blade' },
-  // Severity "None" (SDK enum): not pushed (user decision), still counted as info as before.
+  // Severity "None" (SDK enum): not pushed (maintainer decision), still counted as info as before.
   { Moid: 'alarm-none', Name: 'FixtureNoSeverityAlarm', Code: 'F0007', Severity: 'None', Acknowledge: 'None',
     Suppressed: false, AncestorMoId: 'srv1' }
 ];

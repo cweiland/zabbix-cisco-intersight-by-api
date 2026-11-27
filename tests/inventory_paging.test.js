@@ -2,7 +2,7 @@
 // Cisco Intersight API Docs, "Query Language", "$top and $skip Query Options: Pagination":
 // "You can specify $orderby to sort the results such that paginated results are returned in a
 // predictable order"; the page states no default order. So every inventory and alarm page is
-// sorted by Moid ($orderby=Moid, accepted on the user's appliance with $top, $skip, $filter and
+// sorted by Moid ($orderby=Moid, accepted on a design appliance with $top, $skip, $filter and
 // $select, CLAUDE.md, 2026-11-27). A list cut at MAX_ITEMS_PER_LIST objects is reported in
 // api.errors and the objects read are kept.
 // Fixture objects only (fictitious Moids and names).

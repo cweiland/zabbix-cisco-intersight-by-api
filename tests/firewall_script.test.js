@@ -357,7 +357,7 @@ check('safe.directory: build argument from the local folder name, then the exact
   dockerfile.indexOf('git config --system --add safe.directory "/workspaces/$WORKSPACE_FOLDER_NAME"') !== -1 &&
   !/safe\.directory ["']?\*/.test(dockerfile));
 // Python interpreter of the container (the venv with PyYAML). Without it, the Python extension
-// took the host user's Windows interpreter path from the User settings ("C:\\Program Files\\..."),
+// took the host's Windows interpreter path from the User settings ("C:\\Program Files\\..."),
 // which does not exist in the container. Remote (container) settings override User settings.
 check('Python extension pointed at the container venv (/opt/venv/bin/python)',
   (((devcontainer.customizations || {}).vscode || {}).settings || {})['python.defaultInterpreterPath'] === '/opt/venv/bin/python' &&

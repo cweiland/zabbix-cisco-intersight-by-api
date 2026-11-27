@@ -4,13 +4,13 @@
 read it before changing anything. VS Code does not guarantee that a linked file reaches every
 request, so the essential rules are repeated here.
 
-## Working rules (user requirements)
+## Working rules (maintainer requirements)
 
 - Only justified, verified answers: no inference, no assumption. Back every claim with a source
   (official doc, code, test, log, command output); say plainly when something is not verified.
   Show the reasoning first, then the answer. Answer in French.
 - Check every change for security problems and personal data before proposing it (code, docs,
-  commit messages): secrets, keys, tokens, signed URLs, the user's name, e-mail, machine name,
+  commit messages): secrets, keys, tokens, signed URLs, the maintainer's name, e-mail, machine name,
   host paths and logs. The repository is public.
 - Agent-facing files: any file written for an agent or loaded by one. At least: `CLAUDE.md`,
   `.claude/` (settings, rules, skills, commands, agents), `CLAUDE.local.md`, `.mcp.json`
@@ -25,7 +25,7 @@ request, so the essential rules are repeated here.
   new agent-facing file, import or link. Do not fix it yourself: propose the fix.
 - Human review: Copilot code review reads the instructions from the PR's head branch, not from
   `main` (GitHub doc "Add repository instructions"). Any PR that touches an agent-facing file
-  must be reviewed by the user, not only by an assistant.
+  must be reviewed by the maintainer, not only by an assistant.
 
 ## Project rules
 
@@ -53,11 +53,11 @@ request, so the essential rules are repeated here.
 
 ## Dev container and security
 
-- Git is read-only in the dev container: do not commit or push; the user does it on the host. Do not
+- Git is read-only in the dev container: do not commit or push; the maintainer does it on the host. Do not
   produce patches or mbox files: edit the files, write the commit message to `.commit-msg.txt`
-  (git-ignored) and give the user the branch name ("Change workflow" in `CLAUDE.md`).
-- Before editing, check that the working tree is clean (`git status`); if not, ask the user.
-  One change at a time: wait until the user has committed before starting the next one.
+  (git-ignored) and give the maintainer the branch name ("Change workflow" in `CLAUDE.md`).
+- Before editing, check that the working tree is clean (`git status`); if not, ask the maintainer.
+  One change at a time: wait until the maintainer has committed before starting the next one.
 - Check the commit message for security problems and personal data like any change.
 - Never ask for `.git` to become writable or to commit from the container: a writable `.git`
   (`commondir`, hooks, config) lets the container run commands through git on the host.
@@ -66,6 +66,6 @@ request, so the essential rules are repeated here.
   only once all edits are done, never in parallel with them.
 - Never read `params.json`, `*.pem`, `*.key` or `.env*` (credentials), by any means.
 - Never call the Dev Containers credential relay (`/tmp/vscode-remote-containers-*.js`) or
-  `.devcontainer/check-host-credentials.sh`: only the user runs that check.
+  `.devcontainer/check-host-credentials.sh`: only the maintainer runs that check.
 - Do not weaken the firewall, the read-only mounts, `no-new-privileges` or the system `PATH` of
   the entrypoint; see "Development environment" in `CLAUDE.md`.

@@ -1,7 +1,7 @@
 // Server power state (power_state, item intersight.power.state).
 // OperPowerState is a free string: "The actual power state of the server."
 // (CiscoDevNet/intersight-python, compute_physical_summary_all_of.py), with no list of values.
-// Only "on" and "off" were seen on the user's appliance. Mapping: "on" 1, "off" 0
+// Only "on" and "off" were seen on a design appliance. Mapping: "on" 1, "off" 0
 // (case-insensitive), any other value 2 ("Other", its own WARNING trigger, so that it is not
 // shown as "Off" nor raises "server is powered off"); absent or empty: power_state not sent.
 // Fixture devices only (fictitious Moids and names).

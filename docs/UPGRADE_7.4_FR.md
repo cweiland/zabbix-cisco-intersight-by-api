@@ -2,10 +2,10 @@
 
 ## Pourquoi ce n'est pas un YAML séparé
 
-Je n'ai pas trouvé de documentation publique du format YAML des *discovery prototypes* 7.4. Un fichier écrit à l'aveugle risquerait d'échouer à l'import. La méthode fiable est en deux temps :
+Aucune documentation publique du format YAML des *discovery prototypes* 7.4 n'a été trouvée. Un fichier écrit à l'aveugle risquerait d'échouer à l'import. La méthode fiable est en deux temps :
 
-1. Importer le YAML 7.0 dans Zabbix 7.4 (les imports de versions antérieures sont convertis).
-2. Ajouter la règle imbriquée dans l'UI, puis **exporter** : tu obtiens un YAML 7.4 natif et validé par Zabbix lui-même.
+1. Importez le YAML 7.0 dans Zabbix 7.4.
+2. Ajoutez la règle imbriquée dans l'UI, puis **exportez** : vous obtenez un YAML 7.4 natif et validé par Zabbix lui-même.
 
 ## Ce que ça change
 
@@ -38,24 +38,24 @@ La collecte ne change pas : les blades gardent le nom technique `intersight-<Moi
    - LLD macros : `{#BMOID}` → `$.moid`, `{#BNAME}` → `$.display`, `{#BMODEL}` → `$.model`
    - Delete lost resources : After, `{$INTERSIGHT.HOST.LOST.DELETE}`
    - Disable lost resources : After, `{$INTERSIGHT.HOST.LOST.DISABLE}`
-   - Une seule macro par champ, rien d'autre (doc Zabbix 7.0, « User macros supported by location », note 1). Ces deux macros sont définies sur le template « Cisco Intersight Chassis by push » (`1h` et `7d`). Un host châssis n'hérite pas des macros du template parent : garde les mêmes valeurs que sur « Cisco Intersight by API ». **La suppression doit rester plus longue que la désactivation.**
+   - Une seule macro par champ, rien d'autre (doc Zabbix 7.0, « User macros supported by location », note 1). Ces deux macros sont définies sur le template « Cisco Intersight Chassis by push » (`1h` et `7d`). Un host châssis n'hérite pas des macros du template parent : gardez les mêmes valeurs que sur « Cisco Intersight by API ». **La suppression doit rester plus longue que la désactivation.**
 2. Dans cette règle, **Host prototypes** > Create :
    - Host name : `intersight-{#BMOID}`
    - Visible name : `{#BNAME}`
    - Templates : `Cisco Intersight Server by push`
    - Groups : `Intersight/Servers`
    - Group prototypes : `Intersight/Servers/{#BMODEL}`
-   - Tags : `intersight.class=server`, `intersight.chassis={#NAME}` (les macros LLD du parent restent disponibles)
+   - Tags : `intersight.class=server`, `intersight.model={#BMODEL}`, `intersight.chassis={#NAME}` (les macros LLD du parent restent disponibles)
    - Inventory : Automatic
-3. **Sur le host « Cisco Intersight »** : passer `{$INTERSIGHT.FLAT.SERVERS}` à `0`. Les blades sortent alors de la LLD Servers.
-4. **Exporter** les 4 templates : c'est ta version 7.4 de référence.
+3. **Sur le host « Cisco Intersight »** : passez `{$INTERSIGHT.FLAT.SERVERS}` à `0`. Les blades sortent alors de la LLD Servers.
+4. **Exportez** les 4 templates : c'est votre version 7.4 de référence.
 
 ## Point d'attention lors de la bascule
 
-Les blades déjà créés par la LLD Servers portent le même nom technique que ceux que créera la LLD châssis. Tant que les anciens existent, la nouvelle découverte échoue sur un conflit de nom. Les anciens sont désactivés après `{$INTERSIGHT.HOST.LOST.DISABLE}` (1 h) puis supprimés après `{$INTERSIGHT.HOST.LOST.DELETE}` (7 jours), macros du host parent. Un host désactivé existe toujours, donc le conflit de nom dure jusqu'à la suppression ; tu peux accélérer :
+Les blades déjà créés par la LLD Servers portent le même nom technique que ceux que créera la LLD châssis. Tant que les anciens existent, la nouvelle découverte échoue sur un conflit de nom. Les anciens sont désactivés après `{$INTERSIGHT.HOST.LOST.DISABLE}` (1 h) puis supprimés après `{$INTERSIGHT.HOST.LOST.DELETE}` (7 jours), macros du host parent. Un host désactivé existe toujours, donc le conflit de nom dure jusqu'à la suppression ; vous pouvez accélérer :
 
-- **Sur un environnement neuf** : faire la bascule avant la mise en production.
-- **Sinon** : supprimer les hosts blades découverts juste après l'étape 3. Leur historique est perdu.
+- **Sur un environnement neuf** : faites la bascule avant la mise en production.
+- **Sinon** : supprimez les hosts blades découverts juste après l'étape 3. Leur historique est perdu.
 
 ## Pour aller plus loin en 7.4
 

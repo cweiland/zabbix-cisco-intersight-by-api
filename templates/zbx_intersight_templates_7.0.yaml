@@ -16,7 +16,7 @@ zabbix_export:
     name: Cisco Intersight Server by push
     description: 'Linked by host prototypes of "Cisco Intersight by API". Receives data via history.push; makes no API call itself. Class: rack and blade servers.'
     vendor:
-      name: Custom
+      name: cweiland
       version: 7.0-6
     groups:
     - name: Templates/Cisco Intersight
@@ -1004,7 +1004,7 @@ zabbix_export:
     name: Cisco Intersight Chassis by push
     description: 'Linked by host prototypes of "Cisco Intersight by API". Receives data via history.push; makes no API call itself. Class: chassis.'
     vendor:
-      name: Custom
+      name: cweiland
       version: 7.0-6
     groups:
     - name: Templates/Cisco Intersight
@@ -1779,7 +1779,7 @@ zabbix_export:
     name: Cisco Intersight FI by push
     description: 'Linked by host prototypes of "Cisco Intersight by API". Receives data via history.push; makes no API call itself. Class: Fabric Interconnects.'
     vendor:
-      name: Custom
+      name: cweiland
       version: 7.0-6
     groups:
     - name: Templates/Cisco Intersight
@@ -2624,7 +2624,7 @@ zabbix_export:
     name: Cisco Intersight by API
     description: 'Cisco Intersight (SaaS or appliance). Auth: API key v3 hs2019 (default), API key v2 rsa, or OAuth2. Creates one host per server / chassis / Fabric Interconnect and feeds them with history.push. Requires Zabbix 7.0+.'
     vendor:
-      name: Custom
+      name: cweiland
       version: 7.0-6
     groups:
     - name: Templates/Cisco Intersight
