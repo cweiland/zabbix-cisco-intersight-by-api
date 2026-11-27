@@ -106,7 +106,7 @@ python3 tools/check_metrics_against_doc.py <Supported_Metrices.md>
 - `history.push` exists since Zabbix 7.0. It accepts host + key. If "Allowed hosts" is set on a trapper item, it must include the frontend IP.
 - **Nested LLD (discovery prototypes) only exists since Zabbix 7.4.**
 - `{ITEM.LASTVALUE<N>}` is the item of the Nth **function** of the trigger expression, not the Nth distinct item (Zabbix 7.0 source: `src/libs/zbxeval/parse.c` numbers each function token, `src/libs/zbxdbwrap/trigger.c` `zbx_db_trigger_get_itemid` reads that number). So `last(a)=1 and nodata(a,…)=0 and last(b)>=0` makes `b` `{ITEM.LASTVALUE3}`. The alarm triggers put `nodata()` last for this reason.
-- LLD lost resources in the 7.0 YAML: `lifetime_type` (`DELETE_AFTER`), `lifetime`, `enabled_lifetime_type` (`DISABLE_AFTER`), `enabled_lifetime` (Zabbix 7.0 source, `ui/include/classes/import/validators/C70XmlValidator.php`; default `enabled_lifetime_type` is `DISABLE_IMMEDIATELY`). Consequence: the PSU and port rules, which only set `lifetime`, disabled their resources on the first run without telemetry (the collector sends `psus` / `ports` = `[]`); they now have their own delay macros, `{$INTERSIGHT.LLD.LOST.DISABLE}` (1h) and `{$INTERSIGHT.LLD.LOST.DELETE}` (7d).
+- LLD lost resources in the 7.0 YAML: `lifetime_type` (`DELETE_AFTER`), `lifetime`, `enabled_lifetime_type` (`DISABLE_AFTER`), `enabled_lifetime` (Zabbix 7.0 source, `ui/include/classes/import/validators/C70XmlValidator.php`; default `enabled_lifetime_type` is `DISABLE_IMMEDIATELY`). Consequence: the PSU and port rules, which only set `lifetime`, disabled their resources on the first run without telemetry (the collector sends `psus` / `ports` = `[]`); they now have their own delay macros, `{$INTERSIGHT.LLD.LOST.DISABLE}` (1h) and `{$INTERSIGHT.LLD.LOST.DELETE}` (7d). Same default on the servers, chassis, FI and models rules, and disabling "affects lost hosts, items and triggers" (Zabbix 7.0 "Low-level discovery"): one failed inventory request (list sent as `[]`) disabled every host of that class. Now the collector leaves out a failed list (and `models`), those rules use `DISCARD_VALUE`, and they have `{$INTERSIGHT.HOST.LOST.DISABLE}` (1h) / `{$INTERSIGHT.HOST.LOST.DELETE}` (7d) (`tests/host_lld_failed_inventory.test.js`). Not verified: what happens to the open problems of a disabled host (not stated in the Zabbix doc).
 - Telemetry dataSources (catalog): `hw.network` is in **NetworkInterfaces**; everything else is in **PhysicalEntities**. Queries go to `/api/v1/telemetry/TimeSeries` (DevNet "Telemetry APIs - Query Syntax").
 - `host.name` is not unique (Cisco), so telemetry is matched on `host.type` + `host.name`.
 - Support lists (catalog): `hw.host.power` is NOT reported for IMM chassis (their power = sum of PSU `hw.power`); ECC errors by blades and racks; `system.cpu` / `system.memory` by FIs; `hw.network.bandwidth.utilization_all` by blades, racks and FIs.
@@ -140,6 +140,8 @@ python3 tools/check_metrics_against_doc.py <Supported_Metrices.md>
 - **Response shapes**: list endpoints are assumed to return `{Results: [...]}` (the groupBy `[{event: {...}}]` shape is documented by the Metrics Explorer example).
 - `hw.status` is deliberately not used: its "one series per state" semantics were unclear. Left pending (user decision, 2026-11-24).
 - The OAuth mode has never run against a real Intersight.
+- **Zabbix 7.4 nested blade discovery not import-tested:** the manual steps in `docs/UPGRADE_7.4_FR.md` (rule type Nested, JSONPath `$.blades` with Discard value on failure, lost resources `{$INTERSIGHT.HOST.LOST.DELETE}` / `{$INTERSIGHT.HOST.LOST.DISABLE}`) have never been applied on a real Zabbix 7.4. The behaviour of nested rules was read in the "current" documentation (Zabbix 8.0, "Discovery prototypes"), not in the 7.4 page. The 7.4 import validator (`C74XmlValidator.php`, branch `release/7.4`) has the `NESTED` type and the `lifetime_type` / `enabled_lifetime_type` fields for discovery rules. Also to check on 7.4: what the nested rule receives when the parent "Chassis discovery" discards its value (chassis request failed).
+- **Possible follow-up:** generate a 7.4 template file with the nested blade rule built in, instead of manual steps. Only once a Zabbix 7.4 instance is available to test the import: never publish a template file that was never imported.
 
 ## Repository
 
@@ -159,6 +161,7 @@ python3 tools/check_metrics_against_doc.py <Supported_Metrices.md>
 - Mocked Intersight responses must follow the Cisco support matrices (e.g. no `hw.host` row for IMM chassis).
 - Every request signature is verified cryptographically in the mocks.
 - New behaviour gets a PASS/FAIL check that sets `process.exitCode = 1` on failure.
+- Never build a RegExp from a string in tests (CodeQL "Incomplete string escaping", PR #17 and #19): use plain text search (`indexOf` / `includes`).
 
 ## Claude Code permissions (`.claude/settings.json`)
 

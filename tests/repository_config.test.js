@@ -88,6 +88,12 @@ check('change workflow: copilot-instructions.md says to check `git diff` before 
   });
 });
 
+// Test rule (CodeQL "Incomplete string escaping", PR #17 and #19): Copilot writes tests too.
+Object.keys(instructionFiles).forEach(function (file) {
+  check('testing: ' + file + ' states: Never build a RegExp from a string in tests',
+    collapseWhitespace(instructionFiles[file]).indexOf('Never build a RegExp from a string in tests') !== -1);
+});
+
 // The sync rule is the "Working rules" bullet that contains "in the same change"; each file's
 // rule must name the other file, otherwise a change in one would not lead to the other.
 function syncRule(text) {

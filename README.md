@@ -104,6 +104,10 @@ Chaque appel est isolé dans un `try/catch`. Une métrique absente ne casse pas 
 
 Au premier cycle, `Push: values rejected` est normal : les hosts n'existent pas encore. Ils sont créés par la LLD et alimentés dès le cycle suivant.
 
+**Hôtes perdus (serveurs, châssis, FI, modèles).** Un équipement qui n'est plus remonté par Intersight voit son hôte désactivé après `{$INTERSIGHT.HOST.LOST.DISABLE}` (`1h` par défaut), puis supprimé après `{$INTERSIGHT.HOST.LOST.DELETE}` (`7d` par défaut, historique perdu). Il est réactivé s'il est de nouveau découvert entre-temps (doc Zabbix 7.0, « Low-level discovery »). Les mêmes délais s'appliquent aux items agrégés d'un modèle qui disparaît. **La suppression doit rester plus longue que la désactivation.** Chaque champ de la règle ne contient qu'une macro (doc Zabbix 7.0, « User macros supported by location », note 1) : pour changer les délais, modifie la valeur des macros.
+
+Si la lecture d'une liste (serveurs, châssis ou FI) échoue, le collecteur n'envoie ni cette liste, ni son compte, ni la liste des modèles, ni (pour les serveurs) les listes `blades` des châssis, et les règles de découverte ignorent la valeur : aucun hôte n'est déclaré perdu pour ce cycle. Les équipements lus sont toujours alimentés, et l'erreur apparaît dans « API: last errors ». Une liste vide renvoyée sans erreur par Intersight est en revanche transmise telle quelle : les hôtes de ce type sont alors bien déclarés perdus. Non vérifié : la doc Zabbix ne dit pas ce que deviennent les problèmes ouverts d'un hôte désactivé.
+
 ## Intersight Virtual Appliance
 
 La télémétrie n'existe sur l'appliance que si la collecte de métriques est active. Il faut soit un déploiement multi-nœuds avec un nœud de métriques (2 ou 4 nœuds ; pas en 3 nœuds), soit l'option de collecte en déploiement mono-nœud. Sans cela, l'inventaire, les alarmes et le firmware fonctionnent, mais les items de puissance, température, ventilateurs et réseau restent vides, et « API: last errors » signale les requêtes de télémétrie.

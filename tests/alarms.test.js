@@ -138,6 +138,7 @@ const failedOutput = runCollector();
 check('failed alarm request: devices still pushed, none with an alarms list',
   pushedValues.length === 3 && pushedValues.every(v => !('alarms' in JSON.parse(v.value))));
 check('failed alarm request: no platform_alarms in the result', !('platform_alarms' in failedOutput));
+check('failed alarm request: no alarms totals in the result (not zeros)', !('alarms' in failedOutput));
 check('failed alarm request: error reported in api.errors',
   failedOutput.api.errors.some(e => e.startsWith('alarms: ') && e.includes('cond/Alarms') && e.includes('HTTP 500')));
 
@@ -211,11 +212,13 @@ for (const name of templateNames) {
   for (const [level, priority] of [[3, 'HIGH'], [2, 'WARNING'], [1, 'INFO']]) {
     const expression = `last(${item('severity')})=${level} and last(${item('ack')})>=0 and ` +
       `last(${item('suppressed')})>=0 and nodata(${item('severity')},{$INTERSIGHT.ALARM.NODATA})=0`;
-    const trigger = new RegExp('expression: ' + expression.replace(/[.*+?^${}()|[\]\\\/]/g, '\\$&') +
-      "\\n\\s+name: 'Intersight alarm: \\{#ALARM\\.NAME\\} on \\{#ALARM\\.TARGET\\}'\\n\\s+priority: " + priority +
-      "\\n\\s+opdata: 'Acknowledged in Intersight: \\{ITEM\\.LASTVALUE2\\}, suppressed: \\{ITEM\\.LASTVALUE3\\}'\\n");
+    // Plain text search, no RegExp built from a string (CodeQL "Incomplete string escaping").
+    // Trigger prototype fields are indented by 8 spaces in every template.
+    const trigger = 'expression: ' + expression +
+      "\n        name: 'Intersight alarm: {#ALARM.NAME} on {#ALARM.TARGET}'\n        priority: " + priority +
+      "\n        opdata: 'Acknowledged in Intersight: {ITEM.LASTVALUE2}, suppressed: {ITEM.LASTVALUE3}'\n";
     check(`${name}: severity ${level} -> ${priority}, expression severity/ack/suppressed/nodata, ` +
-      'opdata LASTVALUE2 = ack (function 2), LASTVALUE3 = suppressed (function 3)', trigger.test(rule));
+      'opdata LASTVALUE2 = ack (function 2), LASTVALUE3 = suppressed (function 3)', rule.includes(trigger));
   }
   check(`${name}: tags component=alarm and alarm-code`,
     (rule.match(/- tag: component\n\s+value: alarm\n\s+- tag: alarm-code\n\s+value: '\{#ALARM\.CODE\}'\n/g) || []).length === 6);
@@ -223,3 +226,14 @@ for (const name of templateNames) {
 check('parent passes {$INTERSIGHT.ALARM.CLEARED.WINDOW} (default 1d) to the script',
   /- name: alarm_cleared_window\n\s+value: '\{\$INTERSIGHT\.ALARM\.CLEARED\.WINDOW\}'/.test(yaml) &&
   macroValue(blockOf('Cisco Intersight by API'), 'INTERSIGHT.ALARM.CLEARED.WINDOW') === '1d');
+// Alarm totals of the parent: a missing "alarms" object (alarm request failed) is discarded, not
+// stored as 0. Each item block runs from its "key:" line to the next item ("    - uuid:").
+for (const severity of ['critical', 'warning', 'info']) {
+  const parentBlock = blockOf('Cisco Intersight by API') || '';
+  const start = parentBlock.indexOf('      key: intersight.alarms.total.' + severity + '\n');
+  const end = start < 0 ? -1 : parentBlock.indexOf('\n    - uuid: ', start);
+  const itemBlock = start < 0 ? '' : parentBlock.slice(start, end < 0 ? undefined : end);
+  check(`alarm total intersight.alarms.total.${severity}: missing $.alarms.${severity} discarded (DISCARD_VALUE)`,
+    itemBlock.includes(`        - $.alarms.${severity}\n        error_handler: DISCARD_VALUE\n`) &&
+    !itemBlock.includes('error_handler_params'));
+}

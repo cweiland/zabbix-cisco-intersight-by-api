@@ -48,7 +48,7 @@
  *      net_errors, firmware, mgmt_ip, oper_state, chassis_key, chassis_moid (servers), is_blade,
  *      psus  [ {name, util, out_w, in_w} ],
  *      ports [ {name, role, rx_bps, tx_bps, speed_bps, util, up, errors} ]  (bits per second),
- *      blades [ {moid, display, model} ]   (chassis only)
+ *      blades [ {moid, display, model} ]   (chassis only; absent if the server request failed)
  *      alarms [ alarm ]   alarms whose AncestorMoId is this device's Moid (absent if the
  *                         alarm request failed, so that the alarm LLD discards the value);
  *                         pushed only, removed from servers / chassis / fis below
@@ -59,13 +59,18 @@
  *      ancestor_type (AncestorMoType) in platform_alarms only.
  *      AcknowledgeBy (a person's name) is never read nor pushed.
  *    Returned document:
- *      ts, api {calls, errors[], duration_s, sign_s}, counts {servers, chassis, fi},
+ *      ts, api {calls, errors[], duration_s, sign_s},
+ *      counts {servers, chassis, fi}   each absent if its inventory request failed,
  *      alarms {critical, warning, info}, push {enabled, sent, failed},
- *      servers[], chassis[], fis[], models [ {class, model, group} ],
+ *      servers[], chassis[], fis[]   each absent if its inventory request failed ([] if
+ *                                    Intersight returned no device), so that the host LLD
+ *                                    discards the value instead of losing every host;
+ *      models [ {class, model, group} ]   absent if any of the three inventory lists failed;
  *      platform_alarms [ alarm ]   alarms on no known device (empty AncestorMoId, e.g.
  *                                  iam.ApiKey, or an ancestor that is not a device read here);
  *                                  absent if the alarm request or an inventory list failed
- *    alarms {critical, warning, info} counts only open, unacknowledged alarms (as before).
+ *    alarms {critical, warning, info} counts only open, unacknowledged alarms (as before);
+ *    absent if the alarm request failed, so that the total items discard the value.
  *
  *  METRIC SOURCES (rule: no inferred field name)
  *    Every Druid field queried below appears in an "Available metrics" table of the Cisco
@@ -1552,13 +1557,15 @@ var fabricInterconnectDevices = buildDeviceList(fabricInterconnectInventory, bui
 assignUniqueDisplayNames(serverDevices);
 assignUniqueDisplayNames(chassisDevices);
 assignUniqueDisplayNames(fabricInterconnectDevices);
-attachBladesToChassis(chassisDevices, serverDevices);
+// Server list failed: no blades list at all, rather than an empty one that the 7.4 nested
+// discovery would read as "every blade is lost".
+if (serverInventory !== null) { attachBladesToChassis(chassisDevices, serverDevices); }
 
 var allDevices = serverDevices.concat(chassisDevices, fabricInterconnectDevices);
 var platformAlarms = attachAlarmsToDevices(alarmObjects, allDevices);
 // A failed server, chassis or FI list would move the alarms of its devices to platform_alarms
 // until the next run: platform_alarms is then not sent, so the parent alarm LLD discards the
-// value. Alarms of the devices that were read are still pushed.
+// value. Alarms of the devices that were read are still pushed. models is left out too (below).
 var inventoryComplete = serverInventory !== null && chassisInventory !== null && fabricInterconnectInventory !== null;
 
 // --- Push to the discovered hosts
@@ -1586,16 +1593,22 @@ return JSON.stringify({
         duration_s: (new Date().getTime() - runStartTime) / 1000,
         sign_s: signingTimeMs / 1000
     },
+    // No count for a list that failed (the count items discard a missing value), not a false 0.
     counts: {
-        servers: serverDevices.length,
-        chassis: chassisDevices.length,
-        fi: fabricInterconnectDevices.length
+        servers: serverInventory === null ? undefined : serverDevices.length,
+        chassis: chassisInventory === null ? undefined : chassisDevices.length,
+        fi: fabricInterconnectInventory === null ? undefined : fabricInterconnectDevices.length
     },
-    alarms: countAlarmsBySeverity(alarmObjects),
+    // Alarm request failed: no totals (the total items discard a missing value), not false zeros.
+    alarms: alarmObjects === null ? undefined : countAlarmsBySeverity(alarmObjects),
     push: pushResult,
-    servers: serversForDiscovery,
-    chassis: chassisDevices,
-    fis: fabricInterconnectDevices,
-    models: listDistinctModels(allDevices),
+    // A list whose request failed is left out (JSON.stringify drops undefined): its discovery
+    // rule then discards the value instead of treating every host of that class as lost.
+    // A list that Intersight returned empty is still sent as [] (listAllObjects gives []).
+    servers: serverInventory === null ? undefined : serversForDiscovery,
+    chassis: chassisInventory === null ? undefined : chassisDevices,
+    fis: fabricInterconnectInventory === null ? undefined : fabricInterconnectDevices,
+    // Built from all three lists: incomplete, hence left out, when any of them failed.
+    models: inventoryComplete ? listDistinctModels(allDevices) : undefined,
     platform_alarms: (platformAlarms === null || !inventoryComplete) ? undefined : platformAlarms
 });

@@ -1723,6 +1723,12 @@ zabbix_export:
     - macro: '{$INTERSIGHT.ALARM.LOST.DELETE}'
       value: 7d
       description: 'Alarms no longer reported by Intersight: items deleted after this long. Must be longer than {$INTERSIGHT.ALARM.LOST.DISABLE}.'
+    - macro: '{$INTERSIGHT.HOST.LOST.DISABLE}'
+      value: 1h
+      description: 'Zabbix 7.4 nested blade discovery (docs/UPGRADE_7.4_FR.md): blade hosts no longer reported disabled after this long. Keep the same value as on the template "Cisco Intersight by API": a chassis host does not inherit the macros of the parent template. Must be shorter than {$INTERSIGHT.HOST.LOST.DELETE} (Zabbix 7.0 "Low-level discovery").'
+    - macro: '{$INTERSIGHT.HOST.LOST.DELETE}'
+      value: 7d
+      description: 'Zabbix 7.4 nested blade discovery (docs/UPGRADE_7.4_FR.md): blade hosts no longer reported deleted after this long (history lost). Keep the same value as on the template "Cisco Intersight by API": a chassis host does not inherit the macros of the parent template. Must be longer than {$INTERSIGHT.HOST.LOST.DISABLE}.'
     valuemaps:
     - uuid: 8e519c895f2b4f2484e9cecf27227d6a
       name: Power state
@@ -3832,7 +3838,7 @@ zabbix_export:
         assignUniqueDisplayNames(serverDevices);
         assignUniqueDisplayNames(chassisDevices);
         assignUniqueDisplayNames(fabricInterconnectDevices);
-        attachBladesToChassis(chassisDevices, serverDevices);
+        if (serverInventory !== null) { attachBladesToChassis(chassisDevices, serverDevices); }
 
         var allDevices = serverDevices.concat(chassisDevices, fabricInterconnectDevices);
         var platformAlarms = attachAlarmsToDevices(alarmObjects, allDevices);
@@ -3858,16 +3864,16 @@ zabbix_export:
                 sign_s: signingTimeMs / 1000
             },
             counts: {
-                servers: serverDevices.length,
-                chassis: chassisDevices.length,
-                fi: fabricInterconnectDevices.length
+                servers: serverInventory === null ? undefined : serverDevices.length,
+                chassis: chassisInventory === null ? undefined : chassisDevices.length,
+                fi: fabricInterconnectInventory === null ? undefined : fabricInterconnectDevices.length
             },
-            alarms: countAlarmsBySeverity(alarmObjects),
+            alarms: alarmObjects === null ? undefined : countAlarmsBySeverity(alarmObjects),
             push: pushResult,
-            servers: serversForDiscovery,
-            chassis: chassisDevices,
-            fis: fabricInterconnectDevices,
-            models: listDistinctModels(allDevices),
+            servers: serverInventory === null ? undefined : serversForDiscovery,
+            chassis: chassisInventory === null ? undefined : chassisDevices,
+            fis: fabricInterconnectInventory === null ? undefined : fabricInterconnectDevices,
+            models: inventoryComplete ? listDistinctModels(allDevices) : undefined,
             platform_alarms: (platformAlarms === null || !inventoryComplete) ? undefined : platformAlarms
         });
       parameters:
@@ -4269,7 +4275,10 @@ zabbix_export:
       key: intersight.servers.discovery
       master_item:
         key: intersight.collect
-      lifetime: 7d
+      lifetime_type: DELETE_AFTER
+      lifetime: '{$INTERSIGHT.HOST.LOST.DELETE}'
+      enabled_lifetime_type: DISABLE_AFTER
+      enabled_lifetime: '{$INTERSIGHT.HOST.LOST.DISABLE}'
       lld_macro_paths:
       - lld_macro: '{#MOID}'
         path: $.moid
@@ -4281,8 +4290,7 @@ zabbix_export:
       - type: JSONPATH
         parameters:
         - $.servers
-        error_handler: CUSTOM_VALUE
-        error_handler_params: '[]'
+        error_handler: DISCARD_VALUE
       host_prototypes:
       - uuid: fec67a0802624bb49fe2f1d3e17b0f8c
         host: intersight-{#MOID}
@@ -4306,7 +4314,10 @@ zabbix_export:
       key: intersight.chassis.discovery
       master_item:
         key: intersight.collect
-      lifetime: 7d
+      lifetime_type: DELETE_AFTER
+      lifetime: '{$INTERSIGHT.HOST.LOST.DELETE}'
+      enabled_lifetime_type: DISABLE_AFTER
+      enabled_lifetime: '{$INTERSIGHT.HOST.LOST.DISABLE}'
       lld_macro_paths:
       - lld_macro: '{#MOID}'
         path: $.moid
@@ -4318,8 +4329,7 @@ zabbix_export:
       - type: JSONPATH
         parameters:
         - $.chassis
-        error_handler: CUSTOM_VALUE
-        error_handler_params: '[]'
+        error_handler: DISCARD_VALUE
       host_prototypes:
       - uuid: 658cc0174ba546e9a44ef9bdf982635c
         host: intersight-{#MOID}
@@ -4343,7 +4353,10 @@ zabbix_export:
       key: intersight.fi.discovery
       master_item:
         key: intersight.collect
-      lifetime: 7d
+      lifetime_type: DELETE_AFTER
+      lifetime: '{$INTERSIGHT.HOST.LOST.DELETE}'
+      enabled_lifetime_type: DISABLE_AFTER
+      enabled_lifetime: '{$INTERSIGHT.HOST.LOST.DISABLE}'
       lld_macro_paths:
       - lld_macro: '{#MOID}'
         path: $.moid
@@ -4355,8 +4368,7 @@ zabbix_export:
       - type: JSONPATH
         parameters:
         - $.fis
-        error_handler: CUSTOM_VALUE
-        error_handler_params: '[]'
+        error_handler: DISCARD_VALUE
       host_prototypes:
       - uuid: 750d91bb6ebd4505b1b1b42a7b8fedab
         host: intersight-{#MOID}
@@ -4380,7 +4392,10 @@ zabbix_export:
       key: intersight.models.discovery
       master_item:
         key: intersight.collect
-      lifetime: 7d
+      lifetime_type: DELETE_AFTER
+      lifetime: '{$INTERSIGHT.HOST.LOST.DELETE}'
+      enabled_lifetime_type: DISABLE_AFTER
+      enabled_lifetime: '{$INTERSIGHT.HOST.LOST.DISABLE}'
       lld_macro_paths:
       - lld_macro: '{#CLASS}'
         path: $.class
@@ -4392,8 +4407,7 @@ zabbix_export:
       - type: JSONPATH
         parameters:
         - $.models
-        error_handler: CUSTOM_VALUE
-        error_handler_params: '[]'
+        error_handler: DISCARD_VALUE
       item_prototypes:
       - uuid: 4a654a9694024f43a72e3ef8622882d6
         name: '{#CLASS} {#MODEL}: power sum'
@@ -4711,6 +4725,12 @@ zabbix_export:
     - macro: '{$INTERSIGHT.ALARM.CLEARED.WINDOW}'
       value: 1d
       description: Cleared alarms younger than this are still read, so that their problem closes.
+    - macro: '{$INTERSIGHT.HOST.LOST.DISABLE}'
+      value: 1h
+      description: 'Servers, chassis, FIs and models no longer reported: discovered hosts and model items disabled after this long. Must be shorter than {$INTERSIGHT.HOST.LOST.DELETE} (Zabbix 7.0 "Low-level discovery").'
+    - macro: '{$INTERSIGHT.HOST.LOST.DELETE}'
+      value: 7d
+      description: 'Servers, chassis, FIs and models no longer reported: discovered hosts and model items deleted after this long (history lost). Must be longer than {$INTERSIGHT.HOST.LOST.DISABLE}.'
     - macro: '{$INTERSIGHT.ALARM.NODATA}'
       value: 2h
       description: An alarm item without value for this long closes its problem (alarm gone from Intersight without Cleared, or collector down). Must stay above the 1h heartbeat of the alarm items.
