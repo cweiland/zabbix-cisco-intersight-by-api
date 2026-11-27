@@ -546,8 +546,7 @@ zabbix_export:
       - type: JSONPATH
         parameters:
         - $.psus
-        error_handler: CUSTOM_VALUE
-        error_handler_params: '[]'
+        error_handler: DISCARD_VALUE
       item_prototypes:
       - uuid: 91272f7a25ee43da903e5e82ccba3e18
         name: 'PSU {#PSU}: utilization'
@@ -642,8 +641,7 @@ zabbix_export:
       - type: JSONPATH
         parameters:
         - $.ports
-        error_handler: CUSTOM_VALUE
-        error_handler_params: '[]'
+        error_handler: DISCARD_VALUE
       item_prototypes:
       - uuid: d78de6a6b9de44b280951a5dae42e325
         name: 'Port {#PORT}: received'
@@ -1315,8 +1313,7 @@ zabbix_export:
       - type: JSONPATH
         parameters:
         - $.psus
-        error_handler: CUSTOM_VALUE
-        error_handler_params: '[]'
+        error_handler: DISCARD_VALUE
       item_prototypes:
       - uuid: 7e61f8b4cc1a48e78e7c9462ab2a1f67
         name: 'PSU {#PSU}: utilization'
@@ -1411,8 +1408,7 @@ zabbix_export:
       - type: JSONPATH
         parameters:
         - $.ports
-        error_handler: CUSTOM_VALUE
-        error_handler_params: '[]'
+        error_handler: DISCARD_VALUE
       item_prototypes:
       - uuid: 7e405270b353458c8fe8163bc940c58a
         name: 'Port {#PORT}: received'
@@ -2166,8 +2162,7 @@ zabbix_export:
       - type: JSONPATH
         parameters:
         - $.psus
-        error_handler: CUSTOM_VALUE
-        error_handler_params: '[]'
+        error_handler: DISCARD_VALUE
       item_prototypes:
       - uuid: 77934d36322e4252bab75c6ca2f3d716
         name: 'PSU {#PSU}: utilization'
@@ -2262,8 +2257,7 @@ zabbix_export:
       - type: JSONPATH
         parameters:
         - $.ports
-        error_handler: CUSTOM_VALUE
-        error_handler_params: '[]'
+        error_handler: DISCARD_VALUE
       item_prototypes:
       - uuid: 2cf3e113b887404895fa985b34b28f34
         name: 'Port {#PORT}: received'
@@ -3545,6 +3539,8 @@ zabbix_export:
             return deviceClass + '|' + deviceName;
         }
 
+        var failedTelemetryInstruments = {};
+
         function collectTelemetryByDeviceKey(timeInterval) {
             var telemetryByDeviceKey = {};
 
@@ -3574,7 +3570,9 @@ zabbix_export:
             var queryIndex;
             for (queryIndex = 0; queryIndex < TELEMETRY_QUERIES.length; queryIndex++) {
                 (function (query) {
-                    runStepOrRecordError('telemetry ' + query.instrument, function () { runOneQuery(query); });
+                    if (runStepOrRecordError('telemetry ' + query.instrument, function () { runOneQuery(query); return true; }) === null) {
+                        failedTelemetryInstruments[query.instrument] = true;
+                    }
                 }(TELEMETRY_QUERIES[queryIndex]));
             }
             var allIdleAtMostOne = rawIdleValues.length > 0, idleIndex;
@@ -3641,8 +3639,12 @@ zabbix_export:
                 setIfPresent(device, 'fan_max', telemetry.fan_max);
                 setIfPresent(device, 'psu_util_max', telemetry.psu_util_max);
             }
-            device.psus = telemetry ? objectValues(telemetry.powerSuppliesByName) : [];
-            device.ports = telemetry ? objectValues(telemetry.portsByName) : [];
+            if (!failedTelemetryInstruments['hw.power_supply']) {
+                device.psus = telemetry ? objectValues(telemetry.powerSuppliesByName) : [];
+            }
+            if (!failedTelemetryInstruments['hw.network']) {
+                device.ports = telemetry ? objectValues(telemetry.portsByName) : [];
+            }
             return device;
         }
 

@@ -46,8 +46,10 @@
  *      fan_min, fan_max, fan_margin_min, psu_util_max,
  *      cpu_util, cpu_util_max, mem_util, mem_ecc_correctable, mem_ecc_uncorrectable, mem_ecc_dimms,
  *      net_errors, firmware, mgmt_ip, oper_state, chassis_key, chassis_moid (servers), is_blade,
- *      psus  [ {name, util, out_w, in_w} ],
- *      ports [ {name, role, rx_bps, tx_bps, speed_bps, util, up, errors} ]  (bits per second),
+ *      psus  [ {name, util, out_w, in_w} ]   (absent if the hw.power_supply request failed),
+ *      ports [ {name, role, rx_bps, tx_bps, speed_bps, util, up, errors} ]  (bits per second;
+ *            absent if the hw.network request failed), so that the PSU / port LLD discards
+ *            the value instead of losing every component; [] if the device has no row,
  *      blades [ {moid, display, model} ]   (chassis only; absent if the server request failed)
  *      alarms [ alarm ]   alarms whose AncestorMoId is this device's Moid (absent if the
  *                         alarm request failed, so that the alarm LLD discards the value);
@@ -1218,6 +1220,10 @@ function buildTelemetryKey(deviceClass, deviceName) {
     return deviceClass + '|' + deviceName;
 }
 
+// Instruments whose query failed in this run: { "hw.power_supply": true }. A query that
+// succeeds with no row is not a failure. Read by buildCommonDeviceFields().
+var failedTelemetryInstruments = {};
+
 // Runs every telemetry query. Returns { "<class>|<name>": deviceTelemetry }.
 // Rows are grouped by "host.name" and "host.type"; when host.type is missing, the
 // class is "any" and the lookup falls back to the name only.
@@ -1250,7 +1256,10 @@ function collectTelemetryByDeviceKey(timeInterval) {
     var queryIndex;
     for (queryIndex = 0; queryIndex < TELEMETRY_QUERIES.length; queryIndex++) {
         (function (query) {
-            runStepOrRecordError('telemetry ' + query.instrument, function () { runOneQuery(query); });
+            // runStepOrRecordError() returns null on failure, hence "return true" on success.
+            if (runStepOrRecordError('telemetry ' + query.instrument, function () { runOneQuery(query); return true; }) === null) {
+                failedTelemetryInstruments[query.instrument] = true;
+            }
         }(TELEMETRY_QUERIES[queryIndex]));
     }
     // Idle CPU of every FI at or below 1 with scale 1: almost certainly a 0-1 ratio read as a
@@ -1333,8 +1342,15 @@ function buildCommonDeviceFields(deviceClass, inventoryObject, telemetryByDevice
         setIfPresent(device, 'fan_max', telemetry.fan_max);
         setIfPresent(device, 'psu_util_max', telemetry.psu_util_max);
     }
-    device.psus = telemetry ? objectValues(telemetry.powerSuppliesByName) : [];
-    device.ports = telemetry ? objectValues(telemetry.portsByName) : [];
+    // Request failed: no list at all, so that the PSU / port LLD discards the value instead of
+    // marking every component as lost. Request read but no row for this device: [] (e.g. a
+    // blade has no PSU).
+    if (!failedTelemetryInstruments['hw.power_supply']) {
+        device.psus = telemetry ? objectValues(telemetry.powerSuppliesByName) : [];
+    }
+    if (!failedTelemetryInstruments['hw.network']) {
+        device.ports = telemetry ? objectValues(telemetry.portsByName) : [];
+    }
     return device;
 }
 
