@@ -913,11 +913,10 @@ function callIntersightApi(httpMethod, pathWithQuery, bodyObject) {
 // Query Options: Pagination": "You can specify $orderby to sort the results such that paginated
 // results are returned in a predictable order". The page states no default order: without
 // $orderby, an object could be skipped or read twice if the order changed between two pages.
-// Moid gives a total order: it is unique per object (CiscoDevNet/intersight-python,
-// mo_base_mo.py: "The unique identifier of this Managed Object instance") and does not change
-// (the user's appliance: an alarm keeps its Moid until Cleared; the discovered hosts
-// "intersight-<Moid>" rely on it too). A field such as CreationTime, the doc's example, can
-// have ties. Checked on the user's appliance: $orderby=Moid is accepted together with $top,
+// Moid gives a total order because it is unique per object (CiscoDevNet/intersight-python,
+// mo_base_mo.py: "The unique identifier of this Managed Object instance"). A field such as
+// CreationTime, the doc's example, can have ties. Checked on the user's appliance, on
+// compute/PhysicalSummaries and cond/Alarms: $orderby=Moid is accepted together with $top,
 // $skip, $filter and $select, and the results come back sorted by Moid.
 // At most MAX_ITEMS_PER_LIST objects are read. If the last page read is full, the list is
 // reported as truncated in "API: last errors" and the objects read are kept, so that they stay
