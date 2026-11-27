@@ -74,7 +74,11 @@ const TELEMETRY_ROWS = {
     // Druid merges the two homonyms without host.id into one row.
     row(undefined, 'fixture-dup', RK, undefined, power(700)),
     row('/api/v1/compute/RackUnits/mix1', 'fixture-mixed', RK, undefined, power(400)),
-    row('', 'fixture-fi', undefined, undefined, power(600))],
+    row('', 'fixture-fi', undefined, undefined, power(600)),
+    // host.id segments that name Object.prototype properties (Copilot review of PR #22): with a
+    // plain {} map, "__proto__" returned Object.prototype and storeRow() wrote power_w into it.
+    row('/api/v1/compute/Blades/__proto__', 'fixture-proto', 'compute.Blade', undefined, power(777)),
+    row('/api/v1/compute/Blades/constructor', 'fixture-constructor', 'compute.Blade', undefined, power(666))],
   'hw.power_supply': [
     row('/api/v1/compute/RackUnits/twin1', 'fixture-twin', RK, 'PSU1', psuInput(150)),
     row('/api/v1/compute/RackUnits/twin2', 'fixture-twin', RK, 'PSU1', psuInput(250)),
@@ -154,6 +158,15 @@ check('host.id on hw.host, none on hw.network: power and ports on the same devic
 // --- host.id whose Moid is no inventoried device
 check('host.id of no inventoried device: attributed to no device (no 999 W; same-name rack keeps 100 W)',
   Object.keys(devices).every(moid => devices[moid].power_w !== 999) && devices.leg1.power_w === 100);
+
+// --- host.id segments "__proto__" and "constructor"
+check('host.id segment __proto__ / constructor: attributed to no device (no 777 W nor 666 W)',
+  Object.keys(devices).every(moid => devices[moid].power_w !== 777 && devices[moid].power_w !== 666));
+check('host.id segment __proto__ / constructor: Object.prototype and Object not polluted',
+  ({}).power_w === undefined && ({}).power_max_w === undefined && Object.power_w === undefined);
+check('host.id segment __proto__ / constructor: other devices keep their own values (300 / 500 / 200 / 400 W)',
+  devices.twin1.power_w === 300 && devices.twin2.power_w === 500 && devices.shsrv.power_w === 200 &&
+  devices.mix1.power_w === 400);
 
 // --- Queries
 check('telemetry queries sent (' + telemetryQueries.length + ')', telemetryQueries.length > 0);

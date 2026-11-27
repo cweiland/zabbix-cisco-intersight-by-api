@@ -3559,7 +3559,7 @@ zabbix_export:
         var failedTelemetryInstruments = {};
 
         function collectTelemetryByDeviceMoid(timeInterval, moidByNameKey) {
-            var telemetryByDeviceMoid = {};
+            var telemetryByDeviceMoid = Object.create(null);
 
             function resolveRowMoid(row) {
                 var hostId = row[rowFieldName('host.id')];

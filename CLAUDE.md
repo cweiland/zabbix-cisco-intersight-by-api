@@ -46,7 +46,7 @@ python3 tools/check_metrics_against_doc.py <Supported_Metrices.md>
 ```
 
 - `templates/*.yaml` is **generated**: never edit it by hand. CI fails if it is out of sync with `src/collector.js`.
-- **Zabbix limits item scripts to 65,535 characters.** The template embeds a comment-stripped copy of `src/collector.js` (`strip_comments()` in the generator; 61,743 characters with the telemetry match by `host.id`, i.e. about 3,800 left: any new function must stay compact). Keep comments in the source. The generator, `tools/validate_template.py` and `tests/embedded_script.test.js` all fail if the limit is exceeded.
+- **Zabbix limits item scripts to 65,535 characters.** The template embeds a comment-stripped copy of `src/collector.js` (`strip_comments()` in the generator; 61,760 characters with the telemetry match by `host.id` (null-prototype map), i.e. about 3,800 left: any new function must stay compact). Keep comments in the source. The generator, `tools/validate_template.py` and `tests/embedded_script.test.js` all fail if the limit is exceeded.
 - UUIDs are derived from names (stable across regenerations). Renaming an item key changes its UUID.
 - `src/collector.js` must stay **ES5** (Duktape). No `let`, `const`, arrow functions or template strings. CI checks this.
 - The **JSON contract** between the collector and the templates is documented at the top of `src/collector.js`. Renaming a field requires changing the matching JSONPath in `tools/generate_templates.py`.

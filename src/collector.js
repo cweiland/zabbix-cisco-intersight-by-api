@@ -1256,7 +1256,10 @@ var failedTelemetryInstruments = {};
 // Each row is resolved to a device Moid when it is read, so that one device gets all its
 // rows even if some instruments return host.id and others do not.
 function collectTelemetryByDeviceMoid(timeInterval, moidByNameKey) {
-    var telemetryByDeviceMoid = {};
+    // Keys come from the HTTP response (last segment of host.id): an object without prototype
+    // keeps a segment such as "__proto__" or "constructor" from matching an inherited property
+    // (and storeRow() from writing into Object.prototype). Only read with [], never a method.
+    var telemetryByDeviceMoid = Object.create(null);
 
     // Moid of the device of one row: last segment of host.id ("/api/v1/<space>/<class>/<Moid>",
     // seen on the user's appliance), else the name fallback (class from host.type, "any" when
