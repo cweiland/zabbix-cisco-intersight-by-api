@@ -22,9 +22,11 @@ function runCollector(rawNetworkUtilization, rawIdle, extraParameters) {
   HttpRequest.prototype.post = function (u, b) {
     if (u.includes('api_jsonrpc')) return JSON.stringify({ result: { data: [] } });
     const q = JSON.parse(b), names = q.aggregations.map(a => a.name);
+    // No host_id in these rows: they are matched through the (class, name) fallback.
+    const dimensions = q.dimensions.filter(name => name !== 'host_id');
     const row = (values, component) => {
-      const e = { [q.dimensions[0]]: 'FI-A', [q.dimensions[1]]: 'network.Element' };
-      if (component) e[q.dimensions[2]] = component;
+      const e = { [dimensions[0]]: 'FI-A', [dimensions[1]]: 'network.Element' };
+      if (component) e[dimensions[2]] = component;
       names.forEach((n, i) => { if (values[i] !== undefined) e[n] = values[i]; });
       return { event: e };
     };

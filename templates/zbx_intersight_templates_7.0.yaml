@@ -2678,7 +2678,7 @@ zabbix_export:
         };
         var UNKNOWN_DEVICE_CLASS = 'any';
 
-        var GROUP_BY_ATTRIBUTES = ['host.name', 'host.type'];
+        var GROUP_BY_ATTRIBUTES = ['host.name', 'host.type', 'host.id'];
 
         var runStartTime = new Date().getTime();
         var collectedErrors = [];
@@ -3539,18 +3539,40 @@ zabbix_export:
             return deviceClass + '|' + deviceName;
         }
 
+        function buildMoidByNameKey(inventoryByClass) {
+            var moidByNameKey = {}, deviceClass, list, index, moid, name;
+            function addKey(key) {
+                moidByNameKey[key] = moidByNameKey.hasOwnProperty(key) && moidByNameKey[key] !== moid ? '' : moid;
+            }
+            for (deviceClass in inventoryByClass) {
+                list = inventoryByClass[deviceClass] || [];
+                for (index = 0; index < list.length; index++) {
+                    moid = list[index].Moid;
+                    name = list[index].Name || moid;
+                    addKey(buildTelemetryKey(deviceClass, name));
+                    addKey(buildTelemetryKey(UNKNOWN_DEVICE_CLASS, name));
+                }
+            }
+            return moidByNameKey;
+        }
+
         var failedTelemetryInstruments = {};
 
-        function collectTelemetryByDeviceKey(timeInterval) {
-            var telemetryByDeviceKey = {};
+        function collectTelemetryByDeviceMoid(timeInterval, moidByNameKey) {
+            var telemetryByDeviceMoid = Object.create(null);
 
-            function getDeviceTelemetry(row) {
+            function resolveRowMoid(row) {
+                var hostId = row[rowFieldName('host.id')];
+                if (hostId) { return String(hostId).split('/').pop(); }
                 var deviceClass = DEVICE_CLASS_BY_HOST_TYPE[row[rowFieldName('host.type')]] || UNKNOWN_DEVICE_CLASS;
-                var key = buildTelemetryKey(deviceClass, row[rowFieldName('host.name')]);
-                if (!telemetryByDeviceKey[key]) {
-                    telemetryByDeviceKey[key] = { powerSuppliesByName: {}, portsByName: {}, dimmsWithErrors: [] };
+                return moidByNameKey[buildTelemetryKey(deviceClass, row[rowFieldName('host.name')])] || '';
+            }
+
+            function getDeviceTelemetry(moid) {
+                if (!telemetryByDeviceMoid[moid]) {
+                    telemetryByDeviceMoid[moid] = { powerSuppliesByName: {}, portsByName: {}, dimmsWithErrors: [] };
                 }
-                return telemetryByDeviceKey[key];
+                return telemetryByDeviceMoid[moid];
             }
 
             function runOneQuery(query) {
@@ -3559,11 +3581,13 @@ zabbix_export:
                 if (query.perComponent) { attributes.push(CONFIG.druidComponentDimension); }
                 attributes = attributes.concat(query.extraAttributes || []);
                 var rows = runTelemetryGroupBy(dataSource, query.instrument, attributes, query.aggregations, timeInterval);
-                var rowIndex, row, componentName;
+                var rowIndex, row, componentName, moid;
                 for (rowIndex = 0; rowIndex < rows.length; rowIndex++) {
                     row = rows[rowIndex];
+                    moid = resolveRowMoid(row);
+                    if (!moid) { continue; }
                     componentName = query.perComponent ? (row[rowFieldName(CONFIG.druidComponentDimension)] || ('component' + rowIndex)) : null;
-                    query.storeRow(row, getDeviceTelemetry(row), componentName);
+                    query.storeRow(row, getDeviceTelemetry(moid), componentName);
                 }
             }
 
@@ -3583,7 +3607,7 @@ zabbix_export:
                 collectedErrors.push('units: system.cpu.utilization_idle <= 1 on every FI: if the Intersight UI shows ' +
                     'an idle CPU near 100 %, the values are 0-1 ratios: set {$INTERSIGHT.PERCENT.SCALE} to 100');
             }
-            return telemetryByDeviceKey;
+            return telemetryByDeviceMoid;
         }
 
         function getEquipmentChassisMoid(inventoryObject) {
@@ -3597,7 +3621,7 @@ zabbix_export:
             return domainMoid + ':' + chassisId;
         }
 
-        function buildCommonDeviceFields(deviceClass, inventoryObject, telemetryByDeviceKey) {
+        function buildCommonDeviceFields(deviceClass, inventoryObject, telemetryByDeviceMoid) {
             var device = {
                 moid: inventoryObject.Moid,
                 name: inventoryObject.Name || inventoryObject.Moid,
@@ -3605,8 +3629,7 @@ zabbix_export:
                 model: inventoryObject.Model || 'unknown'
             };
             var alarmSummary = inventoryObject.AlarmSummary || {};
-            var telemetry = telemetryByDeviceKey[buildTelemetryKey(deviceClass, device.name)] ||
-                telemetryByDeviceKey[buildTelemetryKey(UNKNOWN_DEVICE_CLASS, device.name)];
+            var telemetry = telemetryByDeviceMoid[device.moid];
 
             setIfPresent(device, 'serial', inventoryObject.Serial);
             setIfPresent(device, 'alarm_critical', numberOrNull(alarmSummary.Critical));
@@ -3648,8 +3671,8 @@ zabbix_export:
             return device;
         }
 
-        function buildServerDevice(inventoryObject, telemetryByDeviceKey) {
-            var device = buildCommonDeviceFields('server', inventoryObject, telemetryByDeviceKey);
+        function buildServerDevice(inventoryObject, telemetryByDeviceMoid) {
+            var device = buildCommonDeviceFields('server', inventoryObject, telemetryByDeviceMoid);
             setIfPresent(device, 'firmware', inventoryObject.Firmware);
             setIfPresent(device, 'mgmt_ip', inventoryObject.MgmtIpAddress);
             if (inventoryObject.OperPowerState) {
@@ -3662,24 +3685,24 @@ zabbix_export:
             return device;
         }
 
-        function buildChassisDevice(inventoryObject, telemetryByDeviceKey) {
-            var device = buildCommonDeviceFields('chassis', inventoryObject, telemetryByDeviceKey);
+        function buildChassisDevice(inventoryObject, telemetryByDeviceMoid) {
+            var device = buildCommonDeviceFields('chassis', inventoryObject, telemetryByDeviceMoid);
             setIfPresent(device, 'oper_state', inventoryObject.OperState);
             device.chassis_key = buildChassisKey(inventoryObject);
             return device;
         }
 
-        function buildFabricInterconnectDevice(inventoryObject, telemetryByDeviceKey) {
-            var device = buildCommonDeviceFields('fi', inventoryObject, telemetryByDeviceKey);
+        function buildFabricInterconnectDevice(inventoryObject, telemetryByDeviceMoid) {
+            var device = buildCommonDeviceFields('fi', inventoryObject, telemetryByDeviceMoid);
             setIfPresent(device, 'firmware', inventoryObject.Version || inventoryObject.Firmware);
             setIfPresent(device, 'mgmt_ip', inventoryObject.OutOfBandIpAddress || inventoryObject.ManagementIpAddress);
             return device;
         }
 
-        function buildDeviceList(inventoryObjects, buildFunction, telemetryByDeviceKey) {
+        function buildDeviceList(inventoryObjects, buildFunction, telemetryByDeviceMoid) {
             var devices = [], index;
             for (index = 0; inventoryObjects && index < inventoryObjects.length; index++) {
-                devices.push(buildFunction(inventoryObjects[index], telemetryByDeviceKey));
+                devices.push(buildFunction(inventoryObjects[index], telemetryByDeviceMoid));
             }
             return devices;
         }
@@ -3855,11 +3878,12 @@ zabbix_export:
         var collectionTime = new Date();
         var telemetryInterval = new Date(collectionTime.getTime() - CONFIG.telemetryWindowMinutes * 60000).toISOString() +
             '/' + collectionTime.toISOString();
-        var telemetryByDeviceKey = collectTelemetryByDeviceKey(telemetryInterval);
+        var moidByNameKey = buildMoidByNameKey({ server: serverInventory, chassis: chassisInventory, fi: fabricInterconnectInventory });
+        var telemetryByDeviceMoid = collectTelemetryByDeviceMoid(telemetryInterval, moidByNameKey);
 
-        var serverDevices = buildDeviceList(serverInventory, buildServerDevice, telemetryByDeviceKey);
-        var chassisDevices = buildDeviceList(chassisInventory, buildChassisDevice, telemetryByDeviceKey);
-        var fabricInterconnectDevices = buildDeviceList(fabricInterconnectInventory, buildFabricInterconnectDevice, telemetryByDeviceKey);
+        var serverDevices = buildDeviceList(serverInventory, buildServerDevice, telemetryByDeviceMoid);
+        var chassisDevices = buildDeviceList(chassisInventory, buildChassisDevice, telemetryByDeviceMoid);
+        var fabricInterconnectDevices = buildDeviceList(fabricInterconnectInventory, buildFabricInterconnectDevice, telemetryByDeviceMoid);
 
         assignUniqueDisplayNames(serverDevices);
         assignUniqueDisplayNames(chassisDevices);
