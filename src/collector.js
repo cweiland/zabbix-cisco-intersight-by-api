@@ -43,11 +43,13 @@
  *  JSON CONTRACT WITH THE TEMPLATES (do not rename these fields without updating the YAML)
  *    Device object (pushed to intersight.raw, and listed in servers / chassis / fis):
  *      moid, name, display, class, model, serial, alarm_critical, alarm_warning,
- *      power_w, power_max_w, power_source, power_state,
+ *      power_w, power_max_w, power_source,
  *      temp_max, temp_margin_min, temp_margin_degraded_min,
  *      fan_min, fan_max, fan_margin_min, psu_util_max,
  *      cpu_util, cpu_util_max, mem_util, mem_ecc_correctable, mem_ecc_uncorrectable, mem_ecc_dimms,
  *      net_errors, firmware, mgmt_ip, oper_state, chassis_key, chassis_moid (servers), is_blade,
+ *      power_state (servers; 0 off, 1 on, 2 any other OperPowerState; absent if OperPowerState
+ *            is absent or empty),
  *      psus  [ {name, util, out_w, in_w} ]   (absent if the hw.power_supply request failed),
  *      ports [ {name, role, rx_bps, tx_bps, speed_bps, util, up, errors} ]  (bits per second;
  *            absent if the hw.network request failed), so that the PSU / port LLD discards
@@ -1419,8 +1421,16 @@ function buildServerDevice(inventoryObject, telemetryByDeviceMoid) {
     var device = buildCommonDeviceFields('server', inventoryObject, telemetryByDeviceMoid);
     setIfPresent(device, 'firmware', inventoryObject.Firmware);
     setIfPresent(device, 'mgmt_ip', inventoryObject.MgmtIpAddress);
+    // Power state: "on" 1, "off" 0, any other value 2 (case-insensitive); absent or empty:
+    // power_state not sent. OperPowerState is a free string, "The actual power state of the
+    // server." (CiscoDevNet/intersight-python, compute_physical_summary_all_of.py), with no list
+    // of values; only "on" and "off" were seen on the user's appliance (groupby on
+    // OperPowerState). So an unexpected value is not shown as "Off" and does not raise the
+    // "powered off" trigger: it has its own trigger. Plain === comparisons, no map indexed by
+    // the API value.
     if (inventoryObject.OperPowerState) {
-        device.power_state = (String(inventoryObject.OperPowerState).toLowerCase() === 'on') ? 1 : 0;
+        var powerState = String(inventoryObject.OperPowerState).toLowerCase();
+        device.power_state = powerState === 'on' ? 1 : (powerState === 'off' ? 0 : 2);
     }
     device.chassis_moid = getEquipmentChassisMoid(inventoryObject);
     device.chassis_key = buildChassisKey(inventoryObject);

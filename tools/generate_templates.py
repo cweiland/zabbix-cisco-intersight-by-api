@@ -425,8 +425,10 @@ def child(tpl, cls, label, extra_items):
                   'Regex of port roles (hw.network.port.role) to ignore. Default: unconfigured and virtual '
                   'interfaces, as excluded by the intersight-grafana dashboards.'),
         ] + component_lld_macros() + alarm_macros() + (nested_blade_lld_macros() if cls == 'chassis' else []),
+        # Power state (collector, buildServerDevice): 2 = OperPowerState neither "on" nor "off".
         'valuemaps': [{'uuid': uid(T, 'vm'), 'name': 'Power state',
-                       'mappings': [{'value': '0', 'newvalue': 'Off'}, {'value': '1', 'newvalue': 'On'}]},
+                       'mappings': [{'value': '0', 'newvalue': 'Off'}, {'value': '1', 'newvalue': 'On'},
+                                    {'value': '2', 'newvalue': 'Other'}]},
                       {'uuid': uid(T, 'vm-link'), 'name': 'Link state',
                        'mappings': [{'value': '0', 'newvalue': 'Down'}, {'value': '1', 'newvalue': 'Up'}]}]
                      + alarm_valuemaps(T),
@@ -490,6 +492,14 @@ def fan_margin_items(T, tag):
                                'hw.fan.speed below hw.fan.speed.limit_low_critical for 15m, on at least one fan.')])]
 
 
+# Description of the trigger on intersight.power.state = 2 (sources: see buildServerDevice).
+POWER_STATE_OTHER_DESCRIPTION = (
+    'Intersight returned an OperPowerState that is neither "on" nor "off" (value 2, "Other"). Only these '
+    'two values have been seen, and the Intersight SDK sets no list of values: "The actual power state of '
+    'the server." (CiscoDevNet/intersight-python, compute_physical_summary_all_of.py). Check the power state '
+    'of the server in Intersight. The problem closes by itself when the value is "on" or "off" again.')
+
+
 def server_extra(T, tag):
     # ECC: blades and racks. CPU: hw.cpu (imm-blade-mqtt, imm-ism-rack-mqtt).
     return (ecc_items(T, tag) + cpu_items(T, tag, True) + temperature_margin_items(T, tag, True)
@@ -503,7 +513,11 @@ def server_extra(T, tag):
         dep(T, 'intersight.raw', 'Power state', 'intersight.power.state', '$.power_state', 'UNSIGNED',
             tags=tag('power'), vmap='Power state',
             triggers=[trig(T, 'off', 'last(/$T/intersight.power.state)=0', 'Intersight: server is powered off',
-                           'AVERAGE', 'Use a maintenance period for planned shutdowns.', manual=True)]),
+                           'AVERAGE', 'Use a maintenance period for planned shutdowns.', manual=True),
+                      # Exclusive with "powered off" (0 vs 2): no dependency. Closes by itself on 0 or 1.
+                      trig(T, 'power.other', 'last(/$T/intersight.power.state)=2',
+                           'Intersight: unexpected power state reported', 'WARNING',
+                           POWER_STATE_OTHER_DESCRIPTION)]),
     ]
 
 
