@@ -70,7 +70,7 @@ git remote set-url origin git@github.com:<propriétaire>/<dépôt>.git
 5. Vérifiez que l'agent SSH de Windows est arrêté :
 
 ```powershell
-Get-Service ssh-agent      # attendu : Stopped (type de démarrage : Disabled)
+Get-Service ssh-agent | Select-Object Name, Status, StartType   # attendu : Stopped, Disabled
 ```
 
 **Pas d'agent SSH pendant que le conteneur tourne** : Dev Containers transmet automatiquement un agent SSH en marche au conteneur ([documentation VS Code](https://code.visualstudio.com/remote/advancedcontainers/sharing-git-credentials)). Sans agent, votre phrase de passe vous sera demandée à chaque push, et la clé reste sur votre machine.
