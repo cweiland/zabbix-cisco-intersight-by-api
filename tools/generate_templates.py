@@ -227,6 +227,50 @@ def component_lld_macros():
     ]
 
 
+# Lost resources of the parent rules (servers, chassis, FI and models discovery). Same default
+# DISABLE_IMMEDIATELY at import (C70XmlValidator.php), and disabling "affects lost hosts, items
+# and triggers" (Zabbix 7.0 "Low-level discovery"). The collector already leaves out a list whose
+# request failed (the rule discards the value); this delay is the second protection.
+HOST_LLD_LIFETIME = {
+    'lifetime_type': 'DELETE_AFTER', 'lifetime': '{$INTERSIGHT.HOST.LOST.DELETE}',
+    'enabled_lifetime_type': 'DISABLE_AFTER', 'enabled_lifetime': '{$INTERSIGHT.HOST.LOST.DISABLE}',
+}
+
+
+HOST_LOST_DISABLE_DEFAULT = '1h'
+HOST_LOST_DELETE_DEFAULT = '7d'
+
+
+def host_lld_macros():
+    return [
+        macro('{$INTERSIGHT.HOST.LOST.DISABLE}', HOST_LOST_DISABLE_DEFAULT,
+              'Servers, chassis, FIs and models no longer reported: discovered hosts and model items disabled '
+              'after this long. Must be shorter than {$INTERSIGHT.HOST.LOST.DELETE} '
+              '(Zabbix 7.0 "Low-level discovery").'),
+        macro('{$INTERSIGHT.HOST.LOST.DELETE}', HOST_LOST_DELETE_DEFAULT,
+              'Servers, chassis, FIs and models no longer reported: discovered hosts and model items deleted '
+              'after this long (history lost). Must be longer than {$INTERSIGHT.HOST.LOST.DISABLE}.'),
+    ]
+
+
+# Same macros on the chassis template, for the Zabbix 7.4 nested "Blades discovery" rule added by
+# hand (docs/UPGRADE_7.4_FR.md). That rule runs on the discovered chassis hosts, which only link
+# the chassis template: a macro of the parent template does not resolve there. Not used in 7.0.
+def nested_blade_lld_macros():
+    return [
+        macro('{$INTERSIGHT.HOST.LOST.DISABLE}', HOST_LOST_DISABLE_DEFAULT,
+              'Zabbix 7.4 nested blade discovery (docs/UPGRADE_7.4_FR.md): blade hosts no longer reported '
+              'disabled after this long. Keep the same value as on the template "' + PARENT + '": a chassis '
+              'host does not inherit the macros of the parent template. Must be shorter than '
+              '{$INTERSIGHT.HOST.LOST.DELETE} (Zabbix 7.0 "Low-level discovery").'),
+        macro('{$INTERSIGHT.HOST.LOST.DELETE}', HOST_LOST_DELETE_DEFAULT,
+              'Zabbix 7.4 nested blade discovery (docs/UPGRADE_7.4_FR.md): blade hosts no longer reported '
+              'deleted after this long (history lost). Keep the same value as on the template "' + PARENT +
+              '": a chassis host does not inherit the macros of the parent template. Must be longer than '
+              '{$INTERSIGHT.HOST.LOST.DISABLE}.'),
+    ]
+
+
 # ------------------------------------------------------------------ child templates
 def child(tpl, cls, label, extra_items):
     T = tpl
@@ -376,7 +420,7 @@ def child(tpl, cls, label, extra_items):
             macro('{$INTERSIGHT.PORT.ROLE.NOT_MATCHES}', '^(unconfigured|vethernet|vfc|vnic|vhba)$',
                   'Regex of port roles (hw.network.port.role) to ignore. Default: unconfigured and virtual '
                   'interfaces, as excluded by the intersight-grafana dashboards.'),
-        ] + component_lld_macros() + alarm_macros(),
+        ] + component_lld_macros() + alarm_macros() + (nested_blade_lld_macros() if cls == 'chassis' else []),
         'valuemaps': [{'uuid': uid(T, 'vm'), 'name': 'Power state',
                        'mappings': [{'value': '0', 'newvalue': 'Off'}, {'value': '1', 'newvalue': 'On'}]},
                       {'uuid': uid(T, 'vm-link'), 'name': 'Link state',
@@ -570,12 +614,12 @@ def parent(script):
     def lldrule(key, name, path, cls_group, tpl, cls):
         return {
             'uuid': uid(T, key), 'name': name, 'type': 'DEPENDENT', 'key': key, 'master_item': {'key': M},
-            'lifetime': '7d',
+            **HOST_LLD_LIFETIME,
             'lld_macro_paths': [{'lld_macro': '{#MOID}', 'path': '$.moid'},
                                 {'lld_macro': '{#NAME}', 'path': '$.display'},
                                 {'lld_macro': '{#MODEL}', 'path': '$.model'}],
-            'preprocessing': [{'type': 'JSONPATH', 'parameters': [path],
-                               'error_handler': 'CUSTOM_VALUE', 'error_handler_params': '[]'}],
+            # No list (its inventory request failed): discard, so that no host is marked as lost.
+            'preprocessing': [{'type': 'JSONPATH', 'parameters': [path], 'error_handler': 'DISCARD_VALUE'}],
             'host_prototypes': [{
                 'uuid': uid(T, key, 'hp'), 'host': 'intersight-{#MOID}', 'name': '{#NAME}',
                 'inventory_mode': 'AUTOMATIC',
@@ -623,12 +667,12 @@ def parent(script):
                       {'tag': 'model', 'value': '{#MODEL}'}]
     disc.append({
         'uuid': uid(T, 'models'), 'name': 'Models discovery (aggregates per type)', 'type': 'DEPENDENT',
-        'key': 'intersight.models.discovery', 'master_item': {'key': M}, 'lifetime': '7d',
+        'key': 'intersight.models.discovery', 'master_item': {'key': M}, **HOST_LLD_LIFETIME,
         'lld_macro_paths': [{'lld_macro': '{#CLASS}', 'path': '$.class'},
                             {'lld_macro': '{#MODEL}', 'path': '$.model'},
                             {'lld_macro': '{#GROUP}', 'path': '$.group'}],
-        'preprocessing': [{'type': 'JSONPATH', 'parameters': ['$.models'],
-                           'error_handler': 'CUSTOM_VALUE', 'error_handler_params': '[]'}],
+        # No list (an inventory request failed, list incomplete): discard the value.
+        'preprocessing': [{'type': 'JSONPATH', 'parameters': ['$.models'], 'error_handler': 'DISCARD_VALUE'}],
         'item_prototypes': model_items,
     })
     disc.append(alarm_discovery(T, M, '$.platform_alarms'))
@@ -671,7 +715,7 @@ def parent(script):
             macro('{$INTERSIGHT.CO2.G.KWH}', '0', 'Grid carbon intensity in gCO2/kWh. To fill in.'),
             macro('{$INTERSIGHT.ALARM.CLEARED.WINDOW}', '1d',
                   'Cleared alarms younger than this are still read, so that their problem closes.'),
-        ] + alarm_macros(),
+        ] + host_lld_macros() + alarm_macros(),
         'valuemaps': alarm_valuemaps(T),
     }
 

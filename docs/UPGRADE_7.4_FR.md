@@ -19,7 +19,12 @@ Host "Cisco Intersight"
  └─ LLD FI             → hosts Fabric Interconnects
 ```
 
-La doc 7.4 précise que lorsqu'une règle de type *Nested* existe sur un host découvert, elle reçoit l'objet JSON qui a servi à découvrir ce host. Le collecteur inclut déjà, pour chaque châssis, un tableau `blades` contenant `moid`, `display` et `model`.
+D'après la documentation « current » de Zabbix (8.0, « Discovery prototypes »), une règle de type *Nested* sur un host découvert reçoit l'objet JSON qui a servi à découvrir ce host. Ce comportement n'a pas été relu sur la page 7.4, et ces étapes n'ont jamais été appliquées sur un vrai Zabbix 7.4. Ici, la règle « Blades discovery » d'un châssis reçoit donc l'objet de ce châssis tel que l'envoie la règle « Chassis discovery » du host parent. Le collecteur inclut dans cet objet un tableau `blades` contenant `moid`, `display` et `model`.
+
+**Lecture en échec :**
+- **Serveurs** : le collecteur n'envoie pas `blades` dans les châssis. Le JSONPath `$.blades` échoue et la valeur est ignorée (Discard value) : aucune lame n'est déclarée perdue.
+- **Châssis** : le collecteur n'envoie pas la liste `chassis`. La règle « Chassis discovery » du parent ignore la valeur, donc aucun châssis n'est déclaré perdu. Aucun objet châssis n'est alors produit pour la règle imbriquée ; ce qu'elle reçoit dans ce cas n'est pas vérifié.
+- Dans les deux cas, les délais de désactivation et de suppression ci-dessous sont la seconde protection.
 
 La collecte ne change pas : les blades gardent le nom technique `intersight-<Moid>`, donc `history.push` les alimente de la même façon.
 
@@ -29,8 +34,11 @@ La collecte ne change pas : les blades gardent le nom technique `intersight-<Moi
    - Name : `Blades discovery`
    - Type : **Nested**
    - Key : `intersight.blades.discovery`
-   - Preprocessing : JSONPath `$.blades`
+   - Preprocessing : JSONPath `$.blades`, avec « Custom on fail » → **Discard value**. Si la lecture des serveurs a échoué, le collecteur n'envoie pas `blades` : la valeur est alors ignorée au lieu de déclarer toutes les lames perdues.
    - LLD macros : `{#BMOID}` → `$.moid`, `{#BNAME}` → `$.display`, `{#BMODEL}` → `$.model`
+   - Delete lost resources : After, `{$INTERSIGHT.HOST.LOST.DELETE}`
+   - Disable lost resources : After, `{$INTERSIGHT.HOST.LOST.DISABLE}`
+   - Une seule macro par champ, rien d'autre (doc Zabbix 7.0, « User macros supported by location », note 1). Ces deux macros sont définies sur le template « Cisco Intersight Chassis by push » (`1h` et `7d`). Un host châssis n'hérite pas des macros du template parent : garde les mêmes valeurs que sur « Cisco Intersight by API ». **La suppression doit rester plus longue que la désactivation.**
 2. Dans cette règle, **Host prototypes** > Create :
    - Host name : `intersight-{#BMOID}`
    - Visible name : `{#BNAME}`
@@ -44,7 +52,7 @@ La collecte ne change pas : les blades gardent le nom technique `intersight-<Moi
 
 ## Point d'attention lors de la bascule
 
-Les blades déjà créés par la LLD Servers portent le même nom technique que ceux que créera la LLD châssis. Tant que les anciens existent, la nouvelle découverte échoue sur un conflit de nom. Les anciens disparaissent à l'expiration du lifetime de la LLD (7 jours), mais tu peux accélérer :
+Les blades déjà créés par la LLD Servers portent le même nom technique que ceux que créera la LLD châssis. Tant que les anciens existent, la nouvelle découverte échoue sur un conflit de nom. Les anciens sont désactivés après `{$INTERSIGHT.HOST.LOST.DISABLE}` (1 h) puis supprimés après `{$INTERSIGHT.HOST.LOST.DELETE}` (7 jours), macros du host parent. Un host désactivé existe toujours, donc le conflit de nom dure jusqu'à la suppression ; tu peux accélérer :
 
 - **Sur un environnement neuf** : faire la bascule avant la mise en production.
 - **Sinon** : supprimer les hosts blades découverts juste après l'étape 3. Leur historique est perdu.
