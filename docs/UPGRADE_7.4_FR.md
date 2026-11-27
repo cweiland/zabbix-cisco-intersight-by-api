@@ -1,3 +1,5 @@
+Ce guide est disponible en : [English](UPGRADE_7.4.md) | Français
+
 # Variante Zabbix 7.4 : blades découverts sous leur châssis (nested LLD)
 
 ## Pourquoi ce n'est pas un YAML séparé

@@ -1,6 +1,8 @@
+Ce guide est disponible en : [English](DEVCONTAINER_SECURITY.md) | Français
+
 # Configurer sa machine pour le devcontainer
 
-Le devcontainer de ce dépôt (`.devcontainer/`) isole Claude Code et les tests : pare-feu sortant, pas de `sudo`, `.git` en lecture seule, etc. (voir la section « Environnement de développement » du [README](../README.md)).
+Le devcontainer de ce dépôt (`.devcontainer/`) isole Claude Code et les tests : pare-feu sortant, pas de `sudo`, `.git` en lecture seule, etc. (voir la section « Environnement de développement » du [README](../README-fr.md)).
 
 **Une partie de la protection ne peut pas être réglée depuis le dépôt : elle dépend de votre machine.** VS Code (extension Dev Containers) ouvre en effet un canal entre le conteneur et votre machine. Ce guide explique comment le neutraliser, puis comment vérifier que c'est fait.
 
