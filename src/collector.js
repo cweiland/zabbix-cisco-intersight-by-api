@@ -69,7 +69,8 @@
  *      platform_alarms [ alarm ]   alarms on no known device (empty AncestorMoId, e.g.
  *                                  iam.ApiKey, or an ancestor that is not a device read here);
  *                                  absent if the alarm request or an inventory list failed
- *    alarms {critical, warning, info} counts only open, unacknowledged alarms (as before).
+ *    alarms {critical, warning, info} counts only open, unacknowledged alarms (as before);
+ *    absent if the alarm request failed, so that the total items discard the value.
  *
  *  METRIC SOURCES (rule: no inferred field name)
  *    Every Druid field queried below appears in an "Available metrics" table of the Cisco
@@ -1598,7 +1599,8 @@ return JSON.stringify({
         chassis: chassisInventory === null ? undefined : chassisDevices.length,
         fi: fabricInterconnectInventory === null ? undefined : fabricInterconnectDevices.length
     },
-    alarms: countAlarmsBySeverity(alarmObjects),
+    // Alarm request failed: no totals (the total items discard a missing value), not false zeros.
+    alarms: alarmObjects === null ? undefined : countAlarmsBySeverity(alarmObjects),
     push: pushResult,
     // A list whose request failed is left out (JSON.stringify drops undefined): its discovery
     // rule then discards the value instead of treating every host of that class as lost.

@@ -3868,7 +3868,7 @@ zabbix_export:
                 chassis: chassisInventory === null ? undefined : chassisDevices.length,
                 fi: fabricInterconnectInventory === null ? undefined : fabricInterconnectDevices.length
             },
-            alarms: countAlarmsBySeverity(alarmObjects),
+            alarms: alarmObjects === null ? undefined : countAlarmsBySeverity(alarmObjects),
             push: pushResult,
             servers: serverInventory === null ? undefined : serversForDiscovery,
             chassis: chassisInventory === null ? undefined : chassisDevices,

@@ -161,6 +161,7 @@ python3 tools/check_metrics_against_doc.py <Supported_Metrices.md>
 - Mocked Intersight responses must follow the Cisco support matrices (e.g. no `hw.host` row for IMM chassis).
 - Every request signature is verified cryptographically in the mocks.
 - New behaviour gets a PASS/FAIL check that sets `process.exitCode = 1` on failure.
+- Never build a RegExp from a string in tests (CodeQL "Incomplete string escaping", PR #17 and #19): use plain text search (`indexOf` / `includes`).
 
 ## Claude Code permissions (`.claude/settings.json`)
 

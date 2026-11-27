@@ -164,10 +164,16 @@ for (const [ruleName, listPath] of [['Servers discovery', '$.servers'], ['Chassi
   const lifetimeLines = rule.split('\n').filter(line => /^ {6}(enabled_)?lifetime(_type)?: /.test(line));
   check(`${ruleName}: exactly the four lost-resource fields, one macro each`,
     JSON.stringify(lifetimeLines) === JSON.stringify(EXPECTED_LIFETIME_LINES));
-  // The rule's single JSONPath step, with DISCARD_VALUE and no custom value, followed by the next rule field.
-  const discardStep = new RegExp('\\n      preprocessing:\\n      - type: JSONPATH\\n        parameters:\\n        - ' +
-    listPath.replace(/[.$]/g, '\\$&') + '\\n        error_handler: DISCARD_VALUE\\n      \\w');
-  check(`${ruleName}: missing ${listPath} discarded (DISCARD_VALUE), no CUSTOM_VALUE`, discardStep.test(rule));
+  // The rule's single JSONPath step, with DISCARD_VALUE and no custom value, followed by the next
+  // rule field (6 spaces then a letter: not a second step "- type", not error_handler_params).
+  // Plain text search, no RegExp built from a string (CodeQL "Incomplete string escaping").
+  const discardStep = '\n      preprocessing:\n      - type: JSONPATH\n        parameters:\n        - ' + listPath +
+    '\n        error_handler: DISCARD_VALUE\n';
+  const stepEnd = rule.indexOf(discardStep) + discardStep.length;
+  const nextLine = rule.slice(stepEnd, stepEnd + 7);
+  check(`${ruleName}: missing ${listPath} discarded (DISCARD_VALUE), no CUSTOM_VALUE`,
+    rule.includes(discardStep) && nextLine.startsWith('      ') && nextLine[6] !== ' ' && nextLine[6] !== '-' &&
+    !rule.includes('CUSTOM_VALUE') && !rule.includes('error_handler_params'));
 }
 // Count items: a missing count (failed list) is discarded, not stored as 0. Each item block runs
 // from its "key:" line to the next item ("    - uuid:"); its single step must be DISCARD_VALUE.
